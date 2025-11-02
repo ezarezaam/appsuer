@@ -55,14 +55,66 @@ export const handler = async (event, context) => {
       };
     }
 
-    // For now, use simple admin authentication with ADMIN_SECRET
-    // In production, you should implement proper admin user management
-    const adminEmail = 'admin@evenoddpro.com'; // Default admin email
-    
-    if (email === adminEmail && password === ADMIN_SECRET) {
-      // Generate a simple token
+    // Check if admin user exists in database
+    try {
+      const { data: adminUser, error: adminError } = await supabase
+        .from('admin_users')
+        .select('*')
+        .eq('email', email)
+        .eq('is_active', true)
+        .single();
+
+      if (adminError || !adminUser) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'Invalid email or password'
+          })
+        };
+      }
+
+      // Compare password - check if it's hashed or plain text
+      let isPasswordValid = false;
+      
+      // First try direct comparison (for plain text passwords)
+      if (password === adminUser.password) {
+        isPasswordValid = true;
+      } else {
+        // Then try bcrypt comparison (for hashed passwords)
+        try {
+          isPasswordValid = await bcrypt.compare(password, adminUser.password);
+        } catch (bcryptError) {
+          console.warn('bcrypt comparison failed, password might be plain text');
+          isPasswordValid = false;
+        }
+      }
+      
+      if (!isPasswordValid) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'Invalid email or password'
+          })
+        };
+      }
+
+      // Update last login
+      try {
+        await supabase
+          .from('admin_users')
+          .update({ last_login: new Date().toISOString() })
+          .eq('email', email);
+      } catch (updateError) {
+        console.warn('Failed to update last login:', updateError);
+      }
+
+      // Generate JWT token
       const token = jwt.sign(
-        { email: adminEmail, role: 'admin' },
+        { email: adminUser.email, role: 'admin', id: adminUser.id },
         ADMIN_SECRET,
         { expiresIn: '24h' }
       );
@@ -73,16 +125,18 @@ export const handler = async (event, context) => {
         body: JSON.stringify({
           success: true,
           token,
-          email: adminEmail
+          email: adminUser.email
         })
       };
-    } else {
+
+    } catch (dbError) {
+      console.error('Database error during login:', dbError);
       return {
-        statusCode: 401,
+        statusCode: 500,
         headers,
         body: JSON.stringify({
           success: false,
-          error: 'Invalid email or password'
+          error: 'Login failed'
         })
       };
     }
