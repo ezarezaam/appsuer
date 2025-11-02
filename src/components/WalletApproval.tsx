@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type { FC } from 'react';
 import {
   Box,
   VStack,
@@ -9,7 +10,6 @@ import {
   CardBody,
   CardHeader,
   Button,
-  useColorModeValue,
   Icon,
   SimpleGrid,
   Stat,
@@ -47,15 +47,9 @@ import {
   Flex,
   Spacer,
   IconButton,
-  Alert,
-  AlertIcon,
-  AlertTitle,
-  AlertDescription,
   StatHelpText,
-  Link,
   Tooltip
 } from '@chakra-ui/react';
-import { ViewIcon, CheckIcon, CloseIcon, ExternalLinkIcon } from '@chakra-ui/icons';
 import { 
   FiCheck, 
   FiX, 
@@ -79,7 +73,7 @@ import {
   type WalletStats
 } from '../services/realBalanceService';
 
-const WalletApproval: React.FC = () => {
+const WalletApproval: FC = () => {
   const [requests, setRequests] = useState<TopupRequest[]>([]);
   const [stats, setStats] = useState<WalletStats>({
     totalPending: 0,
@@ -154,7 +148,7 @@ const WalletApproval: React.FC = () => {
     try {
       setActionLoading(requestId);
       
-      const result = await approveTopupRequest(requestId, 'admin', approvalNotes || 'Approved');
+      const result = await approveTopupRequest(requestId, approvalNotes || 'Approved');
       
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to approve request');
@@ -201,7 +195,7 @@ const WalletApproval: React.FC = () => {
     try {
       setActionLoading(requestId);
       
-      const result = await rejectTopupRequest(requestId, 'admin', rejectionReason);
+      const result = await rejectTopupRequest(requestId, rejectionReason);
       
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to reject request');

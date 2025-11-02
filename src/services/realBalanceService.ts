@@ -1,14 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-// Use anon key for frontend, but we'll create admin API endpoints
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Frontend uses server API endpoints; no direct Supabase client here
 
 // Admin secret key for API authentication
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET_KEY;
@@ -64,7 +54,7 @@ export const getAllTopupRequests = async (status?: string): Promise<{ success: b
 
     return { success: true, requests: result.requests || [] };
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in getAllTopupRequests:', error);
     return { success: false, error: error.message };
   }
@@ -73,7 +63,6 @@ export const getAllTopupRequests = async (status?: string): Promise<{ success: b
 // Approve topup request
 export const approveTopupRequest = async (
   requestId: string,
-  adminId: string,
   adminNotes?: string
 ): Promise<{ success: boolean; error?: any }> => {
   try {
@@ -101,7 +90,7 @@ export const approveTopupRequest = async (
     }
 
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error approving topup request:', error);
     return { success: false, error: error.message };
   }
@@ -110,7 +99,6 @@ export const approveTopupRequest = async (
 // Reject topup request
 export const rejectTopupRequest = async (
   requestId: string,
-  adminId: string,
   adminNotes: string
 ): Promise<{ success: boolean; error?: any }> => {
   try {
@@ -138,7 +126,7 @@ export const rejectTopupRequest = async (
     }
 
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error rejecting topup request:', error);
     return { success: false, error: error.message };
   }
@@ -166,7 +154,7 @@ export const getWalletStats = async (): Promise<{ success: boolean; stats?: Wall
     }
 
     return { success: true, stats: result.stats };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error getting wallet stats:', error);
     return { success: false, error: error.message };
   }
@@ -197,7 +185,7 @@ export const testConnection = async (): Promise<{ success: boolean; error?: any;
 
     console.log('✅ Database connection test successful');
     return { success: true, info: result };
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Database connection test failed:', error);
     return { success: false, error: error.message };
   }

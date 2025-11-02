@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import type { FC } from 'react';
 import {
   Box,
   VStack,
@@ -28,20 +29,17 @@ import {
   StatLabel,
   StatNumber,
   StatHelpText,
-  StatArrow,
   SimpleGrid,
   InputGroup,
   InputLeftElement,
   Input,
   Icon,
   Avatar,
-  Divider,
   Card,
   CardBody,
   CardHeader,
   Heading,
   TableContainer,
-  useColorModeValue,
   useToast,
   Select,
   Tabs,
@@ -51,8 +49,8 @@ import {
   TabPanel
 } from '@chakra-ui/react';
 import { SearchIcon, ViewIcon } from '@chakra-ui/icons';
-import { FaEye, FaPlus, FaMinus, FaUsers, FaWallet, FaChartLine } from 'react-icons/fa';
-import { supabaseAdmin } from '../lib/supabase';
+import { FaPlus, FaMinus, FaUsers, FaWallet, FaChartLine } from 'react-icons/fa';
+// Admin operations now go through server API; no supabaseAdmin on frontend
 
 interface UserBalance {
   id: string;
@@ -68,6 +66,7 @@ interface UserBalance {
 
 interface Transaction {
   id: string;
+  user_id: string;
   transaction_type: string;
   amount: number;
   balance_before: number;
@@ -82,7 +81,7 @@ interface TransactionWithUser extends Transaction {
   full_name?: string;
 }
 
-const UserBalance: React.FC = () => {
+const UserBalance: FC = () => {
   const [users, setUsers] = useState<UserBalance[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserBalance | null>(null);
@@ -91,7 +90,7 @@ const UserBalance: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen, onClose } = useDisclosure();
   const adjustModal = useDisclosure();
   const toast = useToast();
 
@@ -111,8 +110,7 @@ const UserBalance: React.FC = () => {
   const defaultTypes: string[] = ['topup', 'deduct', 'refund', 'donation', 'premium_purchase', 'transfer'];
   const availableTypes: string[] = Array.from(new Set([...defaultTypes, ...transactions.map(t => t.transaction_type)]));
   
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.600');
+  // Removed unused color values to satisfy TS6133
   const usersMap = useMemo(() => {
     const map = new Map<string, UserBalance>();
     users.forEach(u => map.set(u.user_id, u));
@@ -128,71 +126,24 @@ const UserBalance: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      console.log('Fetching users with balance...');
+      console.log('Fetching users with balance via API...');
+      const response = await fetch(`/api/balances`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET_KEY
+        }
+      });
 
-      // Fetch users with balance - menggunakan supabaseAdmin untuk bypass RLS
-      const { data: balanceData, error: balanceError } = await supabaseAdmin
-        .from('user_balance')
-        .select('*')
-        .order('balance', { ascending: false });
-
-      console.log('Balance data:', balanceData);
-      console.log('Balance error:', balanceError);
-
-      if (balanceError) {
-        throw balanceError;
+      if (!response.ok) {
+        throw new Error('Failed to fetch user balances');
       }
 
-      if (!balanceData || balanceData.length === 0) {
-        console.log('No balance data found');
-        setUsers([]);
-        return;
+      const data = await response.json();
+      if (data.success) {
+        setUsers((data.users || []) as UserBalance[]);
+      } else {
+        throw new Error(data.error || 'Failed to fetch user balances');
       }
-
-      // Get user profiles untuk setiap user_id dari user_balance
-      const usersWithProfiles = await Promise.all(
-        balanceData.map(async (balance) => {
-          try {
-            // Ambil profile data dari user_profiles (data dari evenoddpro_web_2.2) - menggunakan supabaseAdmin
-            const { data: profileData, error: profileError } = await supabaseAdmin
-              .from('user_profiles')
-              .select('full_name, phone, avatar_url')
-              .eq('id', balance.user_id)
-              .single();
-
-            console.log(`Profile data for ${balance.user_id}:`, profileData);
-
-            // Coba ambil email dari auth.users jika memungkinkan
-            let email = `user-${balance.user_id.slice(0, 8)}@evenoddpro.com`;
-            let full_name = profileData?.full_name || 'EvenOddPro User';
-            
-            // Jika ada profile data, gunakan itu
-            if (profileData) {
-              full_name = profileData.full_name || 'EvenOddPro User';
-            }
-
-            return {
-              ...balance,
-              user_email: email,
-              full_name,
-              phone: profileData?.phone || '',
-              avatar_url: profileData?.avatar_url || ''
-            };
-          } catch (error) {
-            console.error('Error fetching profile for user:', balance.user_id, error);
-            return {
-              ...balance,
-              user_email: `user-${balance.user_id.slice(0, 8)}@evenoddpro.com`,
-              full_name: 'EvenOddPro User',
-              phone: '',
-              avatar_url: ''
-            };
-          }
-        })
-      );
-
-      console.log('Final users with profiles:', usersWithProfiles);
-      setUsers(usersWithProfiles);
     } catch (err: any) {
       console.error('Error fetching users:', err);
       setError(err.message || 'Failed to fetch users');
@@ -205,26 +156,31 @@ const UserBalance: React.FC = () => {
     try {
       setGlobalTransactionLoading(true);
       setGlobalError(null);
-      const { data, error } = await supabaseAdmin
-        .from('balance_transactions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500);
-
-      if (error) {
-        throw new Error(error.message || 'Failed to fetch all transactions');
-      }
-
-      const enriched = (data || []).map((tx: any) => {
-        const info = usersMap.get(tx.user_id);
-        return {
-          ...tx,
-          user_email: info?.user_email,
-          full_name: info?.full_name,
-        } as TransactionWithUser;
+      const response = await fetch(`/api/transactions?limit=500`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-secret': import.meta.env.VITE_ADMIN_SECRET_KEY
+        }
       });
 
-      setGlobalTransactions(enriched);
+      if (!response.ok) {
+        throw new Error('Failed to fetch global transactions');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        const enriched = (data.transactions || []).map((tx: any) => {
+          const info = usersMap.get(tx.user_id);
+          return {
+            ...tx,
+            user_email: tx.user_email || info?.user_email,
+            full_name: tx.full_name || info?.full_name,
+          } as TransactionWithUser;
+        });
+        setGlobalTransactions(enriched);
+      } else {
+        throw new Error(data.error || 'Failed to fetch global transactions');
+      }
     } catch (err: any) {
       console.error('Error fetching all transactions:', err);
       setGlobalTransactions([]);

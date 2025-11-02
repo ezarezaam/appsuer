@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
+import type { FC, FormEvent } from 'react'
 import {
   Box,
   Button,
@@ -18,12 +19,12 @@ interface LoginFormProps {
   isLoading?: boolean
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, error, isLoading }) => {
+export const LoginForm: FC<LoginFormProps> = ({ onLogin, error, isLoading }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const bg = useColorModeValue('white', 'gray.800')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (email && password) {
       onLogin(email, password)

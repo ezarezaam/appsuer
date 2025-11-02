@@ -23,7 +23,7 @@ async function checkDatabase() {
   try {
     // 1. Check if we can connect to Supabase
     console.log('\n1️⃣ Testing basic connection...');
-    const { data: healthCheck, error: healthError } = await supabase
+    const { error: healthError } = await supabase
       .from('topup_requests')
       .select('count', { count: 'exact', head: true });
     
@@ -102,9 +102,9 @@ async function checkDatabase() {
           .from(tableName)
           .select('*', { count: 'exact', head: true });
         console.log(`✅ Found table: ${tableName} (${count} records)`);
-      } catch (error) {
-        console.log(`❌ Table not found: ${tableName}`);
-      }
+    } catch (error: any) {
+      console.log(`❌ Table not found: ${tableName}`);
+    }
     }
 
     // 6. Check authentication status
@@ -116,7 +116,7 @@ async function checkDatabase() {
       console.log('✅ Authenticated as:', user?.email || 'Anonymous');
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('💥 Unexpected error:', error);
   }
 }
@@ -124,6 +124,6 @@ async function checkDatabase() {
 // Run the check
 checkDatabase().then(() => {
   console.log('\n🏁 Database check completed');
-}).catch(error => {
+}).catch((error: any) => {
   console.error('💥 Script failed:', error);
 });

@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ChakraProvider,
   Box,
   VStack,
-  HStack,
   Text,
   Button,
   Input,
@@ -11,7 +10,6 @@ import {
   FormLabel,
   Alert,
   AlertIcon,
-  Badge,
   useColorModeValue,
   Container,
   Heading,

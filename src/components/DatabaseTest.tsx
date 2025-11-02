@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type { FC } from 'react';
 import {
   Box,
   VStack,
@@ -22,12 +23,12 @@ import {
   StatLabel,
   StatNumber,
   StatHelpText,
-  Divider
+  
 } from '@chakra-ui/react';
 import { FiDatabase, FiRefreshCw, FiCheck, FiX, FiInfo, FiUsers, FiCreditCard } from 'react-icons/fi';
 import { testConnection, getAllTopupRequests } from '../services/realBalanceService';
 
-const DatabaseTest: React.FC = () => {
+const DatabaseTest: FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [requestsData, setRequestsData] = useState<any>(null);

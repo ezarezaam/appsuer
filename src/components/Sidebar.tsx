@@ -1,4 +1,4 @@
-import React from 'react';
+import type { FC } from 'react';
 import {
   Box,
   VStack,
@@ -9,7 +9,7 @@ import {
   Divider,
   useColorModeValue,
   Badge,
-  Flex
+  
 } from '@chakra-ui/react';
 import { 
   CheckCircleIcon, 
@@ -26,7 +26,7 @@ interface SidebarProps {
   adminEmail?: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ 
+const Sidebar: FC<SidebarProps> = ({ 
   activeTab, 
   onTabChange, 
   onLogout, 

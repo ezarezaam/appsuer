@@ -416,6 +416,59 @@ app.get('/api/balance/:userId', authenticateAdmin, async (req, res) => {
   }
 });
 
+// List all user balances with basic profile info
+app.get('/api/balances', authenticateAdmin, async (req, res) => {
+  try {
+    // Fetch all balances
+    const { data: balances, error: balancesError } = await supabase
+      .from('user_balance')
+      .select('id, user_id, balance, created_at, updated_at')
+      .order('balance', { ascending: false });
+
+    if (balancesError) {
+      console.error('List balances error:', balancesError);
+      return res.status(500).json({ error: balancesError.message });
+    }
+
+    if (!balances || balances.length === 0) {
+      return res.status(200).json({ success: true, users: [] });
+    }
+
+    const userIds = balances.map(b => b.user_id).filter(Boolean);
+
+    // Fetch profiles in batch
+    let profilesMap = new Map();
+    if (userIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, phone, avatar_url')
+        .in('id', userIds);
+
+      if (profilesError) {
+        console.warn('Fetch profiles error:', profilesError);
+      } else if (profiles) {
+        profiles.forEach(p => profilesMap.set(p.id, p));
+      }
+    }
+
+    const users = balances.map(b => {
+      const profile = profilesMap.get(b.user_id) || {};
+      return {
+        ...b,
+        user_email: `user-${String(b.user_id).slice(0, 8)}@evenoddpro.com`,
+        full_name: profile.full_name || 'EvenOddPro User',
+        phone: profile.phone || '',
+        avatar_url: profile.avatar_url || ''
+      };
+    });
+
+    return res.status(200).json({ success: true, users });
+  } catch (error) {
+    console.error('List balances API Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Adjust user balance (topup/deduct/refund)
 app.post('/api/balance/:userId/adjust', authenticateAdmin, async (req, res) => {
   try {
@@ -591,6 +644,47 @@ app.get('/api/transactions/:userId', authenticateAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Get transactions API Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get global transactions (admin overview)
+app.get('/api/transactions', authenticateAdmin, async (req, res) => {
+  try {
+    const { limit = 500 } = req.query;
+
+    const { data: txData, error: txError } = await supabase
+      .from('balance_transactions')
+      .select('id, user_id, transaction_type, amount, balance_before, balance_after, description, reference_id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(parseInt(limit));
+
+    if (txError) {
+      console.error('Global transactions query error:', txError);
+      return res.status(500).json({ error: txError.message });
+    }
+
+    const userIds = (txData || []).map(t => t.user_id).filter(Boolean);
+    let profilesMap = new Map();
+    if (userIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+      if (!profilesError && profiles) {
+        profiles.forEach(p => profilesMap.set(p.id, p));
+      }
+    }
+
+    const transactions = (txData || []).map(tx => ({
+      ...tx,
+      full_name: profilesMap.get(tx.user_id)?.full_name || null,
+      user_email: `user-${String(tx.user_id).slice(0, 8)}@evenoddpro.com`
+    }));
+
+    return res.status(200).json({ success: true, transactions });
+  } catch (error) {
+    console.error('Global transactions API Error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
