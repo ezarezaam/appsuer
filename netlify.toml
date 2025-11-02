@@ -1,11 +1,14 @@
 [build]
-  command = "npm run build"
+  command = "npm run build && cd netlify/functions && npm install"
   publish = "dist"
   functions = "netlify/functions"
 
 [build.environment]
   NODE_VERSION = "18"
   NPM_CONFIG_PRODUCTION = "false"
+
+[functions]
+  directory = "netlify/functions"
 
 # Redirect API calls to Netlify Functions
 [[redirects]]
