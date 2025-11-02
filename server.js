@@ -23,6 +23,11 @@ const PORT = process.env.PORT || 3005;
 // Middleware
 app.use(cors());
 app.use(express.json());
+// Prevent search engine indexing for API responses
+app.use((req, res, next) => {
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  next();
+});
 
 // Environment variables for server-side
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;

@@ -29,3 +29,6 @@ dist-ssr
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Private docs (avoid pushing operational SQL)
+BALANCE_SYSTEM_SETUP.md
