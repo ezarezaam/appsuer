@@ -1,5 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
-const jwt = require('jsonwebtoken');
+import { createClient } from '@supabase/supabase-js';
 
 // Environment variables for server-side (no hard-coded fallbacks)
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -9,7 +8,7 @@ const ADMIN_SECRET = process.env.VITE_ADMIN_SECRET_KEY;
 // Create Supabase client with service role key (server-side only)
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-exports.handler = async (event, context) => {
+export const handler = async (event, context) => {
   // Basic safety: prevent indexing
   const headers = {
     'X-Robots-Tag': 'noindex, nofollow',
@@ -37,32 +36,9 @@ exports.handler = async (event, context) => {
     };
   }
 
-  // Check admin authentication - support both JWT token and x-admin-secret
-  let isAuthenticated = false;
-  
-  // First try JWT token authentication
-  const authHeader = event.headers['authorization'];
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    try {
-      const decoded = jwt.verify(token, ADMIN_SECRET);
-      if (decoded.role === 'admin') {
-        isAuthenticated = true;
-      }
-    } catch (jwtError) {
-      console.error('JWT verification failed:', jwtError);
-    }
-  }
-  
-  // Fallback to x-admin-secret authentication
-  if (!isAuthenticated) {
-    const adminSecret = event.headers['x-admin-secret'];
-    if (adminSecret === ADMIN_SECRET) {
-      isAuthenticated = true;
-    }
-  }
-  
-  if (!isAuthenticated) {
+  // Check admin authentication
+  const adminSecret = event.headers['x-admin-secret'];
+  if (adminSecret !== ADMIN_SECRET) {
     return {
       statusCode: 401,
       headers,

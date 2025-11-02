@@ -1,9 +1,7 @@
 // Frontend uses server API endpoints; no direct Supabase client here
 
-// Get JWT token from localStorage for authentication
-const getAuthToken = () => {
-  return localStorage.getItem('admin_token');
-};
+// Admin secret key for API authentication
+const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET_KEY;
 
 export interface TopupRequest {
   id: string;
@@ -34,18 +32,13 @@ export interface WalletStats {
 // Get all topup requests from API
 export const getAllTopupRequests = async (status?: string): Promise<{ success: boolean; requests?: TopupRequest[]; error?: any }> => {
   try {
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
     const url = `/api/admin?action=topup-requests${status ? `&status=${status}` : ''}`;
     
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'x-admin-secret': ADMIN_SECRET
       }
     });
 
@@ -73,16 +66,11 @@ export const approveTopupRequest = async (
   adminNotes?: string
 ): Promise<{ success: boolean; error?: any }> => {
   try {
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
     const response = await fetch('/api/admin?action=update-status', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'x-admin-secret': ADMIN_SECRET
       },
       body: JSON.stringify({
         id: requestId,
@@ -111,24 +99,19 @@ export const approveTopupRequest = async (
 // Reject topup request
 export const rejectTopupRequest = async (
   requestId: string,
-  rejectionReason: string
+  adminNotes: string
 ): Promise<{ success: boolean; error?: any }> => {
   try {
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
     const response = await fetch('/api/admin?action=update-status', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'x-admin-secret': ADMIN_SECRET
       },
       body: JSON.stringify({
         id: requestId,
         status: 'rejected',
-        admin_notes: rejectionReason
+        admin_notes: adminNotes
       })
     });
 
@@ -149,19 +132,14 @@ export const rejectTopupRequest = async (
   }
 };
 
-// Get wallet stats
+// Get wallet statistics
 export const getWalletStats = async (): Promise<{ success: boolean; stats?: WalletStats; error?: any }> => {
   try {
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
     const response = await fetch('/api/admin?action=stats', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'x-admin-secret': ADMIN_SECRET
       }
     });
 
@@ -172,29 +150,26 @@ export const getWalletStats = async (): Promise<{ success: boolean; stats?: Wall
     const result = await response.json();
     
     if (!result.success) {
-      throw new Error(result.error || 'Failed to fetch stats');
+      throw new Error(result.error || 'Failed to get stats');
     }
 
     return { success: true, stats: result.stats };
   } catch (error: any) {
-    console.error('Error in getWalletStats:', error);
+    console.error('Error getting wallet stats:', error);
     return { success: false, error: error.message };
   }
 };
 
-// Test connection to database
-export const testConnection = async (): Promise<{ success: boolean; error?: any }> => {
+// Test database connection and inspect tables
+export const testConnection = async (): Promise<{ success: boolean; error?: any; info?: any }> => {
   try {
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
-
+    console.log('🔍 Testing database connection via API...');
+    
     const response = await fetch('/api/admin?action=test-connection', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'x-admin-secret': ADMIN_SECRET
       }
     });
 
@@ -208,9 +183,10 @@ export const testConnection = async (): Promise<{ success: boolean; error?: any 
       throw new Error(result.error || 'Connection test failed');
     }
 
-    return { success: true };
+    console.log('✅ Database connection test successful');
+    return { success: true, info: result };
   } catch (error: any) {
-    console.error('Error in testConnection:', error);
+    console.error('❌ Database connection test failed:', error);
     return { success: false, error: error.message };
   }
 };
