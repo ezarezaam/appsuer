@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-import jwt from 'jsonwebtoken';
+const { createClient } = require('@supabase/supabase-js');
+const jwt = require('jsonwebtoken');
 
 // Environment variables for server-side (no hard-coded fallbacks)
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -9,7 +9,7 @@ const ADMIN_SECRET = process.env.VITE_ADMIN_SECRET_KEY;
 // Create Supabase client with service role key (server-side only)
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-export const handler = async (event, context) => {
+exports.handler = async (event, context) => {
   // Basic safety: prevent indexing
   const headers = {
     'X-Robots-Tag': 'noindex, nofollow',
