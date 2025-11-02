@@ -4,8 +4,14 @@ import * as dotenv from 'dotenv';
 // Load environment variables from .env file
 dotenv.config();
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://msddbiwywzdcgaylshuf.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zZGRiaXd5d3pkY2dheWxzaHVmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDAxNzg2OSwiZXhwIjoyMDY1NTkzODY5fQ.e5f3Z53H5EwrOvHP82lITGYBPQtmKUMFbEg_rR9T1dE';
+// Read env vars only; do not hard-code secrets
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+  console.error('❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables');
+  process.exit(1);
+}
 
 // Use service role key for admin access (bypasses RLS)
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);

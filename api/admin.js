@@ -1,14 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Environment variables for server-side
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://msddbiwywzdcgaylshuf.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zZGRiaXd5d3pkY2dheWxzaHVmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDAxNzg2OSwiZXhwIjoyMDY1NTkzODY5fQ.e5f3Z53H5EwrOvHP82lITGYBPQtmKUMFbEg_rR9T1dE';
-const ADMIN_SECRET = process.env.VITE_ADMIN_SECRET_KEY || 'admin_wallet_approval_2024';
+// Environment variables for server-side (no hard-coded fallbacks)
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+const ADMIN_SECRET = process.env.VITE_ADMIN_SECRET_KEY;
 
 // Create Supabase client with service role key (server-side only)
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 export default async function handler(req, res) {
+  // Basic safety: prevent indexing
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -17,6 +20,12 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
+  }
+
+  // Verify required environment variables are present
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !ADMIN_SECRET) {
+    console.error('❌ Missing required environment variables for admin API');
+    return res.status(500).json({ error: 'Server misconfiguration' });
   }
 
   // Check admin authentication
