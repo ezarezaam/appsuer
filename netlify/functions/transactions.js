@@ -5,8 +5,21 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 const ADMIN_SECRET = process.env.VITE_ADMIN_SECRET_KEY;
 
+// Debug logging for production
+console.log('🔍 Transactions Function Debug:');
+console.log('SUPABASE_URL exists:', !!SUPABASE_URL);
+console.log('SUPABASE_SERVICE_KEY exists:', !!SUPABASE_SERVICE_KEY);
+console.log('ADMIN_SECRET exists:', !!ADMIN_SECRET);
+
 // Create Supabase client
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+let supabase;
+try {
+  supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  console.log('✅ Supabase client created successfully');
+} catch (error) {
+  console.error('❌ Failed to create Supabase client:', error);
+  supabase = null;
+}
 
 export const handler = async (event, context) => {
   const headers = {
