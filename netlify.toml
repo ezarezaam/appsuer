@@ -1,7 +1,40 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
 
 [build.environment]
   NODE_VERSION = "22"
   NPM_CONFIG_PRODUCTION = "false"
+
+# Redirect API calls to Netlify Functions
+[[redirects]]
+  from = "/api/admin/login"
+  to = "/.netlify/functions/login"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin"
+  to = "/.netlify/functions/admin"
+  status = 200
+
+[[redirects]]
+  from = "/api/balances"
+  to = "/.netlify/functions/balances"
+  status = 200
+
+[[redirects]]
+  from = "/api/transactions/*"
+  to = "/.netlify/functions/transactions"
+  status = 200
+
+[[redirects]]
+  from = "/api/transactions"
+  to = "/.netlify/functions/transactions"
+  status = 200
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
