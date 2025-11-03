@@ -415,7 +415,8 @@ const WalletApproval: FC = () => {
                     <Table variant="simple">
                       <Thead bg="gray.50">
                         <Tr>
-                          <Th>User Information</Th>
+                          <Th>Name</Th>
+                          <Th>Email</Th>
                           <Th isNumeric>Amount</Th>
                           <Th>Payment Method</Th>
                           <Th>Status</Th>
@@ -427,14 +428,14 @@ const WalletApproval: FC = () => {
                         {filteredRequests.map((request) => (
                           <Tr key={request.id} _hover={{ bg: "gray.50" }}>
                             <Td>
-                              <VStack align="start" spacing={0}>
-                                <Text fontWeight="medium" fontSize="sm">
-                                  {request.user_profile?.full_name || 'Unknown User'}
-                                </Text>
-                                <Text fontSize="xs" color="gray.500">
-                                  {request.user_profile?.email}
-                                </Text>
-                              </VStack>
+                              <Text fontWeight="medium" fontSize="sm">
+                                {request.user_profile?.full_name || 'Unknown User'}
+                              </Text>
+                            </Td>
+                            <Td>
+                              <Text fontSize="sm" color="gray.600">
+                                {request.user_profile?.email || 'No email'}
+                              </Text>
                             </Td>
                             <Td isNumeric>
                               <Text fontWeight="bold" color="blue.600">

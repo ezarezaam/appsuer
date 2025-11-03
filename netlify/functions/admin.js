@@ -270,6 +270,80 @@ export const handler = async (event, context) => {
             };
           }
 
+          // First, get the topup request details
+          const { data: topupRequest, error: fetchError } = await supabase
+            .from('topup_requests')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+          if (fetchError) {
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({ error: fetchError.message })
+            };
+          }
+
+          if (!topupRequest) {
+            return {
+              statusCode: 404,
+              headers,
+              body: JSON.stringify({ error: 'Topup request not found' })
+            };
+          }
+
+          // If status is being changed to 'approved', update user balance
+          if (status === 'approved' && topupRequest.status !== 'approved') {
+            try {
+              // Call the update_user_balance function
+              const { data: balanceResult, error: balanceError } = await supabase
+                .rpc('update_user_balance', {
+                  p_user_id: topupRequest.user_id,
+                  p_amount: topupRequest.amount,
+                  p_transaction_type: 'topup',
+                  p_description: `Top-up approved by admin: ${admin_notes || 'No notes'}`,
+                  p_reference_id: id,
+                  p_created_by: null
+                });
+
+              if (balanceError) {
+                console.error('Balance update error:', balanceError);
+                return {
+                  statusCode: 500,
+                  headers,
+                  body: JSON.stringify({ 
+                    error: 'Failed to update user balance: ' + balanceError.message 
+                  })
+                };
+              }
+
+              // Check if balance update was successful
+              if (!balanceResult || !balanceResult.success) {
+                console.error('Balance update failed:', balanceResult);
+                return {
+                  statusCode: 500,
+                  headers,
+                  body: JSON.stringify({ 
+                    error: 'Failed to update user balance: ' + (balanceResult?.error || 'Unknown error')
+                  })
+                };
+              }
+
+              console.log('Balance updated successfully:', balanceResult);
+            } catch (balanceUpdateError) {
+              console.error('Balance update exception:', balanceUpdateError);
+              return {
+                statusCode: 500,
+                headers,
+                body: JSON.stringify({ 
+                  error: 'Failed to update user balance: ' + balanceUpdateError.message 
+                })
+              };
+            }
+          }
+
+          // Update the topup request status
           const { data, error } = await supabase
             .from('topup_requests')
             .update({
@@ -292,7 +366,11 @@ export const handler = async (event, context) => {
           return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({ success: true, request: data[0] })
+            body: JSON.stringify({ 
+              success: true, 
+              request: data[0],
+              message: status === 'approved' ? 'Topup approved and balance updated successfully' : 'Status updated successfully'
+            })
           };
         }
         break;
