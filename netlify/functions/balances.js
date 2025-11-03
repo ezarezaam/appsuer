@@ -60,7 +60,7 @@ export const handler = async (event) => {
     if (userIds.length > 0) {
       const { data: profiles, error: profilesError } = await supabase
         .from('user_profiles')
-        .select('id, full_name, phone, avatar_url')
+        .select('id, full_name, phone, avatar_url, user_email')
         .in('id', userIds);
 
       if (profilesError) {
@@ -74,7 +74,7 @@ export const handler = async (event) => {
       const profile = profilesMap.get(b.user_id) || {};
       return {
         ...b,
-        user_email: `user-${String(b.user_id).slice(0, 8)}@evenoddpro.com`,
+        user_email: profile.user_email || `user-${String(b.user_id).slice(0, 8)}@evenoddpro.com`,
         full_name: profile.full_name || 'EvenOddPro User',
         phone: profile.phone || '',
         avatar_url: profile.avatar_url || ''

@@ -63,10 +63,15 @@ export const getAllTopupRequests = async (status?: string): Promise<{ success: b
     }
 
     // Normalize user info key for UI: ensure user_profile exists
-    const normalized = (result.requests || []).map((req: any) => ({
-      ...req,
-      user_profile: req.user_profile || req.user || req.userProfile || null
-    }));
+    const normalized = (result.requests || []).map((req: any) => {
+      const rawProfile = req.user_profile || req.user || req.userProfile || null;
+      const email = rawProfile?.email || rawProfile?.user_email || undefined;
+      const profile = rawProfile ? { ...rawProfile, email } : null;
+      return {
+        ...req,
+        user_profile: profile
+      };
+    });
 
     return { success: true, requests: normalized };
     
