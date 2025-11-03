@@ -1,5 +1,10 @@
 const { createClient } = require('@supabase/supabase-js');
 
+// Environment variables (aligned with admin-lite)
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+const ADMIN_SECRET = process.env.VITE_ADMIN_SECRET_KEY || process.env.ADMIN_SECRET_KEY;
+
 exports.handler = async (event, context) => {
   // Enable CORS
   if (event.httpMethod === 'OPTIONS') {
@@ -17,7 +22,7 @@ exports.handler = async (event, context) => {
   try {
     // Check admin secret
     const adminSecret = event.headers['x-admin-secret'];
-    if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET_KEY) {
+    if (!adminSecret || adminSecret !== ADMIN_SECRET) {
       return {
         statusCode: 401,
         headers: {
@@ -29,7 +34,7 @@ exports.handler = async (event, context) => {
     }
 
     // Initialize Supabase
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
       return {
         statusCode: 500,
         headers: {
@@ -40,14 +45,14 @@ exports.handler = async (event, context) => {
           success: false, 
           error: 'Missing environment variables',
           details: {
-            has_supabase_url: !!process.env.SUPABASE_URL,
-            has_service_key: !!process.env.SUPABASE_SERVICE_KEY
+            has_supabase_url: !!SUPABASE_URL,
+            has_service_key: !!SUPABASE_SERVICE_KEY
           }
         })
       };
     }
 
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
     // Get user_id from query params
     const { user_id } = event.queryStringParameters || {};
@@ -92,7 +97,8 @@ exports.handler = async (event, context) => {
     }
 
     // Get recent transactions (limited to 10 for performance)
-    const { data: transactionsData, error: transactionsError } = await supabase
+    let transactionsData = [];
+    const { data: txData, error: transactionsError } = await supabase
       .from('topup_requests')
       .select('id, amount, status, created_at')
       .eq('user_id', user_id)
@@ -103,6 +109,8 @@ exports.handler = async (event, context) => {
       console.error('Error fetching transactions:', transactionsError);
       // Don't fail the whole request if transactions fail
       transactionsData = [];
+    } else {
+      transactionsData = txData || [];
     }
 
     return {
