@@ -37,10 +37,9 @@ function App() {
   const cardBg = useColorModeValue('white', 'gray.800');
 
   useEffect(() => {
-    // Check if already logged in
-    const token = localStorage.getItem('admin_token');
+    // Check if already logged in by persisted admin email
     const savedEmail = localStorage.getItem('admin_email');
-    if (token && savedEmail) {
+    if (savedEmail) {
       setIsLoggedIn(true);
       setAdminEmail(savedEmail);
     }
@@ -67,10 +66,11 @@ function App() {
       const data = await response.json();
 
       if (data.success) {
-        localStorage.setItem('admin_token', data.token);
-        localStorage.setItem('admin_email', data.email);
+        // Server returns { success, admin, message }
+        const emailFromServer = data?.admin?.email || email;
+        localStorage.setItem('admin_email', emailFromServer);
         setIsLoggedIn(true);
-        setAdminEmail(data.email);
+        setAdminEmail(emailFromServer);
       } else {
         setError(data.error || 'Invalid email or password');
       }
@@ -82,7 +82,6 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('admin_token');
     localStorage.removeItem('admin_email');
     setIsLoggedIn(false);
     setAdminEmail('');
