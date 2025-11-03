@@ -68,11 +68,11 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Simple query - just get balance, no joins
+    // Simple query - get balance from user_balance table
     const { data: balanceData, error: balanceError } = await supabase
-      .from('user_profiles')
-      .select('id, balance')
-      .eq('id', user_id)
+      .from('user_balance')
+      .select('user_id, balance')
+      .eq('user_id', user_id)
       .single();
 
     if (balanceError) {
@@ -121,7 +121,7 @@ exports.handler = async (event, context) => {
       },
       body: JSON.stringify({
         success: true,
-        balance: balanceData.balance || 0,
+        balance: (balanceData && balanceData.balance) ? Number(balanceData.balance) : 0,
         transactions: transactionsData || []
       })
     };
