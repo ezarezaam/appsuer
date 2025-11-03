@@ -29,6 +29,8 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const SMTP_SECURE = (process.env.SMTP_SECURE || '').toLowerCase() === 'true' || SMTP_PORT === 465;
 const SMTP_FROM = process.env.SMTP_FROM || 'no-reply@evenoddpro.com';
+const EMAIL_LOCALE = (process.env.EMAIL_LOCALE || 'en').toLowerCase();
+const EMAIL_CURRENCY = process.env.EMAIL_CURRENCY || 'USD';
 
 let mailer = null;
 try {
@@ -53,25 +55,55 @@ async function sendTopupStatusEmail({ to, name, status, amount, paymentMethod, c
     return { success: false, skipped: true, error: 'SMTP not configured' };
   }
 
-  const subject = status === 'approved'
-    ? 'Top-up Anda Disetujui'
-    : status === 'rejected'
-      ? 'Top-up Anda Ditolak'
-      : `Status Top-up: ${status}`;
+  const isIndonesian = EMAIL_LOCALE === 'id' || EMAIL_LOCALE === 'id-id';
+  const effectiveCurrency = currency || EMAIL_CURRENCY;
+  const amountStr = Number(amount).toLocaleString(isIndonesian ? 'id-ID' : 'en-US');
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-      <h2 style="color: #2c3e50;">${subject}</h2>
-      <p>Halo${name ? ` ${name}` : ''},</p>
-      <p>Permintaan top-up Anda telah diperbarui dengan status: <strong>${status.toUpperCase()}</strong>.</p>
-      <ul>
-        <li>Amount: <strong>${currency || 'IDR'} ${Number(amount).toLocaleString('id-ID')}</strong></li>
-        <li>Metode Pembayaran: <strong>${paymentMethod || '-'}</strong></li>
-      </ul>
-      ${notes ? `<p>Catatan admin: ${notes}</p>` : ''}
-      <p>Terima kasih telah menggunakan EvenOddPro.</p>
-    </div>
-  `;
+  const subject = (() => {
+    if (isIndonesian) {
+      return status === 'approved'
+        ? 'Top-up Anda Disetujui'
+        : status === 'rejected'
+          ? 'Top-up Anda Ditolak'
+          : `Status Top-up: ${status}`;
+    }
+    return status === 'approved'
+      ? 'Your Top-up Has Been Approved'
+      : status === 'rejected'
+        ? 'Your Top-up Has Been Rejected'
+        : `Top-up Status: ${status}`;
+  })();
+
+  const html = (() => {
+    if (isIndonesian) {
+      return `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+          <h2 style="color: #2c3e50;">${subject}</h2>
+          <p>Halo${name ? ` ${name}` : ''},</p>
+          <p>Permintaan top-up Anda telah diperbarui dengan status: <strong>${status.toUpperCase()}</strong>.</p>
+          <ul>
+            <li>Jumlah: <strong>${effectiveCurrency} ${amountStr}</strong></li>
+            <li>Metode Pembayaran: <strong>${paymentMethod || '-'}</strong></li>
+          </ul>
+          ${notes ? `<p>Catatan admin: ${notes}</p>` : ''}
+          <p>Terima kasih telah menggunakan EvenOddPro.</p>
+        </div>
+      `;
+    }
+    return `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <h2 style="color: #2c3e50;">${subject}</h2>
+        <p>Hello${name ? ` ${name}` : ''},</p>
+        <p>Your top-up request has been updated with status: <strong>${status.toUpperCase()}</strong>.</p>
+        <ul>
+          <li>Amount: <strong>${effectiveCurrency} ${amountStr}</strong></li>
+          <li>Payment Method: <strong>${paymentMethod || '-'}</strong></li>
+        </ul>
+        ${notes ? `<p>Admin notes: ${notes}</p>` : ''}
+        <p>Thank you for using EvenOddPro.</p>
+      </div>
+    `;
+  })();
 
   try {
     await mailer.sendMail({ from: SMTP_FROM, to, subject, html });
@@ -460,7 +492,7 @@ export const handler = async (event, context) => {
                 status,
                 amount: updatedRequest?.amount ?? topupRequest.amount,
                 paymentMethod: updatedRequest?.payment_method ?? topupRequest.payment_method,
-                currency: updatedRequest?.payment_currency ?? topupRequest.payment_currency ?? 'IDR',
+                currency: updatedRequest?.payment_currency ?? topupRequest.payment_currency ?? EMAIL_CURRENCY,
                 notes: admin_notes,
               });
             }
