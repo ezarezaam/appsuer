@@ -52,6 +52,7 @@ export const handler = async (event, context) => {
   try {
     const url = new URL(event.rawUrl || `https://${event.headers.host}${event.path}`, 'https://example.com');
     const action = url.searchParams.get('action');
+    const statsParam = url.searchParams.get('stats');
 
     // Handle different actions
     if (action === 'test-connection') {
@@ -79,6 +80,43 @@ export const handler = async (event, context) => {
           message: 'Connection successful',
           records: data?.length || 0
         })
+      };
+    }
+
+    // Lightweight stats endpoint
+    if (action === 'stats' || statsParam === 'true') {
+      const { data, error } = await supabase
+        .from('topup_requests')
+        .select('status, amount');
+
+      if (error) {
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ 
+            success: false, 
+            error: 'Failed to fetch stats',
+            details: error.message
+          })
+        };
+      }
+
+      const totals = { totalPending: 0, totalApproved: 0, totalRejected: 0, pendingAmount: 0 };
+      for (const row of data || []) {
+        if (row.status === 'pending') {
+          totals.totalPending++;
+          totals.pendingAmount += Number(row.amount) || 0;
+        } else if (row.status === 'approved') {
+          totals.totalApproved++;
+        } else if (row.status === 'rejected') {
+          totals.totalRejected++;
+        }
+      }
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: true, stats: totals })
       };
     }
 

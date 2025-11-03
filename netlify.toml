@@ -33,6 +33,33 @@
   to = "/.netlify/functions/transactions"
   status = 200
 
+# Lite endpoints
+[[redirects]]
+  from = "/api/admin-lite"
+  to = "/.netlify/functions/admin-lite"
+  status = 200
+
+[[redirects]]
+  from = "/api/balances-lite"
+  to = "/.netlify/functions/balances-lite"
+  status = 200
+
+[[redirects]]
+  from = "/api/transactions-lite"
+  to = "/.netlify/functions/transactions-lite"
+  status = 200
+
+[[redirects]]
+  from = "/api/transactions-lite/*"
+  to = "/.netlify/functions/transactions-lite"
+  status = 200
+
+# Ensure functions paths are not caught by SPA fallback
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
 # SPA fallback
 [[redirects]]
   from = "/*"
