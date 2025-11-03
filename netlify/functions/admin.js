@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 
 // Environment variables for server-side (no hard-coded fallbacks)
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -19,6 +20,65 @@ try {
 } catch (error) {
   console.error('❌ Failed to create Supabase client:', error);
   supabase = null;
+}
+
+// SMTP config for production emails
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const SMTP_SECURE = (process.env.SMTP_SECURE || '').toLowerCase() === 'true' || SMTP_PORT === 465;
+const SMTP_FROM = process.env.SMTP_FROM || 'no-reply@evenoddpro.com';
+
+let mailer = null;
+try {
+  if (SMTP_HOST && SMTP_PORT && SMTP_FROM && (SMTP_USER ? SMTP_PASS : true)) {
+    mailer = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+      auth: SMTP_USER ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
+      tls: { rejectUnauthorized: false }
+    });
+    console.log('✅ SMTP transporter initialized');
+  } else {
+    console.warn('⚠️ SMTP not fully configured; emails will be skipped');
+  }
+} catch (e) {
+  console.warn('⚠️ Failed to initialize SMTP transporter:', e?.message || e);
+}
+
+async function sendTopupStatusEmail({ to, name, status, amount, paymentMethod, currency, notes }) {
+  if (!mailer) {
+    return { success: false, skipped: true, error: 'SMTP not configured' };
+  }
+
+  const subject = status === 'approved'
+    ? 'Top-up Anda Disetujui'
+    : status === 'rejected'
+      ? 'Top-up Anda Ditolak'
+      : `Status Top-up: ${status}`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+      <h2 style="color: #2c3e50;">${subject}</h2>
+      <p>Halo${name ? ` ${name}` : ''},</p>
+      <p>Permintaan top-up Anda telah diperbarui dengan status: <strong>${status.toUpperCase()}</strong>.</p>
+      <ul>
+        <li>Amount: <strong>${currency || 'IDR'} ${Number(amount).toLocaleString('id-ID')}</strong></li>
+        <li>Metode Pembayaran: <strong>${paymentMethod || '-'}</strong></li>
+      </ul>
+      ${notes ? `<p>Catatan admin: ${notes}</p>` : ''}
+      <p>Terima kasih telah menggunakan EvenOddPro.</p>
+    </div>
+  `;
+
+  try {
+    await mailer.sendMail({ from: SMTP_FROM, to, subject, html });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
+  }
 }
 
 export const handler = async (event, context) => {
@@ -363,12 +423,59 @@ export const handler = async (event, context) => {
             };
           }
 
+          // Attempt to send email notification using auth.admin
+          let emailResult = { success: false, skipped: true };
+          try {
+            const updatedRequest = data?.[0] || topupRequest;
+            const userId = updatedRequest?.user_id || topupRequest.user_id;
+
+            // Get user full name from profile
+            let fullName = null;
+            try {
+              const { data: profileData, error: profileErr } = await supabase
+                .from('user_profiles')
+                .select('full_name')
+                .eq('id', userId)
+                .single();
+              if (!profileErr) {
+                fullName = profileData?.full_name || null;
+              }
+            } catch (_) {}
+
+            // Get email from auth users via admin API (requires service role)
+            let userEmail = null;
+            try {
+              const { data: userResp, error: userErr } = await supabase.auth.admin.getUserById(userId);
+              if (!userErr) {
+                userEmail = userResp?.user?.email || null;
+              }
+            } catch (e) {
+              console.warn('⚠️ Failed to fetch auth user email:', e?.message || e);
+            }
+
+            if (userEmail) {
+              emailResult = await sendTopupStatusEmail({
+                to: userEmail,
+                name: fullName,
+                status,
+                amount: updatedRequest?.amount ?? topupRequest.amount,
+                paymentMethod: updatedRequest?.payment_method ?? topupRequest.payment_method,
+                currency: updatedRequest?.payment_currency ?? topupRequest.payment_currency ?? 'IDR',
+                notes: admin_notes,
+              });
+            }
+          } catch (e) {
+            console.warn('⚠️ Email notification failed:', e?.message || e);
+          }
+
           return {
             statusCode: 200,
             headers,
             body: JSON.stringify({ 
               success: true, 
               request: data[0],
+              email_sent: !!emailResult?.success,
+              email_error: emailResult?.error,
               message: status === 'approved' ? 'Topup approved and balance updated successfully' : 'Status updated successfully'
             })
           };
