@@ -32,27 +32,43 @@ export interface WalletStats {
 // Get all topup requests from API
 export const getAllTopupRequests = async (status?: string): Promise<{ success: boolean; requests?: TopupRequest[]; error?: any }> => {
   try {
-    const url = `/api/admin?action=topup-requests${status ? `&status=${status}` : ''}`;
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-secret': ADMIN_SECRET
-      }
-    });
+    // Prefer lite endpoint in production; fallback to full admin endpoint (works in local dev proxy)
+    const liteUrl = `/api/admin-lite${status ? `?status=${status}` : ''}`;
+    const fullUrl = `/api/admin?action=topup-requests${status ? `&status=${status}` : ''}`;
+
+    const doFetch = async (url: string) => {
+      const resp = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-secret': ADMIN_SECRET
+        }
+      });
+      return resp;
+    };
+
+    let response = await doFetch(liteUrl);
+    if (!response.ok) {
+      // Fallback to full admin endpoint
+      response = await doFetch(fullUrl);
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const result = await response.json();
-    
     if (!result.success) {
       throw new Error(result.error || 'Failed to fetch requests');
     }
 
-    return { success: true, requests: result.requests || [] };
+    // Normalize user info key for UI: ensure user_profile exists
+    const normalized = (result.requests || []).map((req: any) => ({
+      ...req,
+      user_profile: req.user_profile || req.user || req.userProfile || null
+    }));
+
+    return { success: true, requests: normalized };
     
   } catch (error: any) {
     console.error('Error in getAllTopupRequests:', error);
@@ -132,10 +148,11 @@ export const rejectTopupRequest = async (
   }
 };
 
-// Get wallet statistics
+// Get wallet statistics - using lite endpoint
 export const getWalletStats = async (): Promise<{ success: boolean; stats?: WalletStats; error?: any }> => {
   try {
-    const response = await fetch('/api/admin?action=stats', {
+    // Try lite endpoint first
+    const response = await fetch('/api/admin-lite?stats=true', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -144,7 +161,26 @@ export const getWalletStats = async (): Promise<{ success: boolean; stats?: Wall
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      // Fallback to old endpoint
+      const fallbackResponse = await fetch('/api/admin?action=stats', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-secret': ADMIN_SECRET
+        }
+      });
+
+      if (!fallbackResponse.ok) {
+        throw new Error(`HTTP error! status: ${fallbackResponse.status}`);
+      }
+
+      const result = await fallbackResponse.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to get stats');
+      }
+
+      return { success: true, stats: result.stats };
     }
 
     const result = await response.json();

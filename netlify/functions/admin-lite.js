@@ -158,13 +158,13 @@ export const handler = async (event, context) => {
       }
     }
 
-    // Combine data
+    // Combine data using UI-compatible key: user_profile
     const requestsWithUsers = requests.map(request => ({
       ...request,
-      user: users.find(u => u.id === request.user_id) || {
+      user_profile: users.find(u => u.id === request.user_id) || {
         id: request.user_id,
-        user_email: 'Unknown',
-        full_name: 'Unknown User'
+        email: `user-${String(request.user_id).slice(0, 8)}@evenoddpro.com`,
+        full_name: 'EvenOddPro User'
       }
     }));
 
