@@ -54,11 +54,7 @@
   to = "/.netlify/functions/transactions-lite"
   status = 200
 
-# Ensure functions paths are not caught by SPA fallback
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+
 
 # SPA fallback
 [[redirects]]

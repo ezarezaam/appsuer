@@ -162,12 +162,6 @@ const UserSubscription: FC = () => {
         else setSortDirection('none');
     };
 
-    const getSortIcon = () => {
-        if (sortDirection === 'asc') return <FaSortUp />;
-        if (sortDirection === 'desc') return <FaSortDown />;
-        return <FaSort />;
-    };
-
     return (
         <Box p={4} w="full" maxW="none">
             <VStack spacing={4} align="stretch" w="full">
