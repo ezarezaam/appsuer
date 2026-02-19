@@ -9,12 +9,12 @@ import {
   Divider,
   useColorModeValue,
   Badge,
-  
+
 } from '@chakra-ui/react';
-import { 
-  CheckCircleIcon, 
-  SettingsIcon, 
-  AddIcon, 
+import {
+  CheckCircleIcon,
+  SettingsIcon,
+  AddIcon,
   ViewIcon,
   StarIcon
 } from '@chakra-ui/icons';
@@ -26,11 +26,11 @@ interface SidebarProps {
   adminEmail?: string;
 }
 
-const Sidebar: FC<SidebarProps> = ({ 
-  activeTab, 
-  onTabChange, 
-  onLogout, 
-  adminEmail 
+const Sidebar: FC<SidebarProps> = ({
+  activeTab,
+  onTabChange,
+  onLogout,
+  adminEmail
 }) => {
   const bg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -58,10 +58,10 @@ const Sidebar: FC<SidebarProps> = ({
       description: 'Test koneksi database'
     },
     {
-      id: 'test-data',
-      label: 'Test Data Generator',
+      id: 'user-subscription',
+      label: 'User Subscribtion',
       icon: AddIcon,
-      description: 'Generate data testing'
+      description: 'Kelola langganan pengguna'
     }
   ];
 
@@ -103,7 +103,7 @@ const Sidebar: FC<SidebarProps> = ({
                 </Text>
               </VStack>
             </HStack>
-            
+
             {adminEmail && (
               <Box>
                 <Text fontSize="xs" color="gray.500" mb={1}>
@@ -123,7 +123,7 @@ const Sidebar: FC<SidebarProps> = ({
             <Text fontSize="xs" fontWeight="semibold" color="gray.500" mb={2} px={3}>
               MENU UTAMA
             </Text>
-            
+
             {menuItems.map((item) => (
               <Button
                 key={item.id}
@@ -140,9 +140,9 @@ const Sidebar: FC<SidebarProps> = ({
                 borderRadius="lg"
               >
                 <HStack spacing={3} align="start" w="full">
-                  <Icon 
-                    as={item.icon} 
-                    boxSize={5} 
+                  <Icon
+                    as={item.icon}
+                    boxSize={5}
                     color={activeTab === item.id ? activeColor : 'gray.500'}
                     mt={0.5}
                   />

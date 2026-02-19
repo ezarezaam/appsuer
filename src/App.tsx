@@ -21,8 +21,8 @@ import {
 import Sidebar from './components/Sidebar';
 import WalletApproval from './components/WalletApproval';
 import DatabaseTest from './components/DatabaseTest';
-import { TestDataGenerator } from './components/TestDataGenerator';
 import UserBalance from './components/UserBalance';
+import UserSubscription from './components/UserSubscription';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -98,8 +98,8 @@ function App() {
         return <UserBalance />;
       case 'database-test':
         return <DatabaseTest />;
-      case 'test-data':
-        return <TestDataGenerator />;
+      case 'user-subscription':
+        return <UserSubscription />;
       default:
         return <WalletApproval />;
     }
@@ -117,9 +117,9 @@ function App() {
                     <Heading size="lg" textAlign="center" color="blue.600">EvenOddPro</Heading>
                     <Text color="gray.600" textAlign="center">Admin Wallet Approval</Text>
                   </VStack>
-                  
+
                   <Divider />
-                  
+
                   <VStack spacing={4} w="full">
                     <FormControl isRequired>
                       <FormLabel>Email</FormLabel>

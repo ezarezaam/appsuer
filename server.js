@@ -143,13 +143,13 @@ app.get('/api/admin', authenticateAdmin, async (req, res) => {
         // Fetch user profiles separately if needed
         const userIds = [...new Set(topupData.map(req => req.user_id).filter(Boolean))];
         let userData = [];
-        
+
         if (userIds.length > 0) {
           const { data: users, error: userError } = await supabase
             .from('user_profiles')
             .select('id, full_name')
             .in('id', userIds);
-          
+
           if (!userError) {
             userData = users || [];
           }
@@ -191,8 +191,8 @@ app.get('/api/admin', authenticateAdmin, async (req, res) => {
           .limit(1);
 
         if (testError) {
-          return res.status(500).json({ 
-            success: false, 
+          return res.status(500).json({
+            success: false,
             error: testError.message,
             details: 'Failed to connect to topup_requests table'
           });
@@ -207,6 +207,10 @@ app.get('/api/admin', authenticateAdmin, async (req, res) => {
           .from('user_profiles')
           .select('*');
 
+        const { data: subData, error: subError } = await supabase
+          .from('user_subscriptions')
+          .select('*');
+
         return res.status(200).json({
           success: true,
           connection: 'Connected successfully',
@@ -218,9 +222,52 @@ app.get('/api/admin', authenticateAdmin, async (req, res) => {
             user_profiles: {
               count: profileData?.length || 0,
               sample: profileData?.[0] || null
+            },
+            user_subscriptions: {
+              count: subData?.length || 0,
+              sample: subData?.[0] || null
             }
           }
         });
+
+      case 'subscriptions':
+        console.log('📬 Subscriptions request received');
+        const { data: subscriptions, error: subscriptionsError } = await supabase
+          .from('user_subscriptions')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (subscriptionsError) {
+          console.error('❌ Error fetching subscriptions:', subscriptionsError.message);
+          return res.status(500).json({ error: subscriptionsError.message });
+        }
+        console.log(`✅ Fetched ${subscriptions?.length || 0} subscriptions`);
+
+        // Fetch user profiles for these subscriptions
+        const subUserIds = [...new Set(subscriptions.map(s => s.user_id).filter(Boolean))];
+        let subUserData = [];
+
+        if (subUserIds.length > 0) {
+          const { data: users, error: userError } = await supabase
+            .from('user_profiles')
+            .select('id, full_name, user_email')
+            .in('id', subUserIds);
+
+          if (!userError) {
+            subUserData = users || [];
+          }
+        }
+
+        const enrichedSubscriptions = subscriptions.map(sub => {
+          const profile = subUserData.find(u => u.id === sub.user_id) || {};
+          return {
+            ...sub,
+            full_name: profile.full_name || 'EvenOddPro User',
+            user_email: profile.user_email || `user-${String(sub.user_id).slice(0, 8)}@evenoddpro.com`
+          };
+        });
+
+        return res.status(200).json({ success: true, subscriptions: enrichedSubscriptions });
 
       default:
         return res.status(400).json({ error: 'Invalid action' });
@@ -273,15 +320,15 @@ app.put('/api/admin', authenticateAdmin, async (req, res) => {
 
           if (balanceError) {
             console.error('Balance update error:', balanceError);
-            return res.status(500).json({ 
-              error: 'Failed to update user balance: ' + balanceError.message 
+            return res.status(500).json({
+              error: 'Failed to update user balance: ' + balanceError.message
             });
           }
 
           // Check if balance update was successful
           if (!balanceResult || !balanceResult.success) {
             console.error('Balance update failed:', balanceResult);
-            return res.status(500).json({ 
+            return res.status(500).json({
               error: 'Failed to update user balance: ' + (balanceResult?.error || 'Unknown error')
             });
           }
@@ -289,8 +336,8 @@ app.put('/api/admin', authenticateAdmin, async (req, res) => {
           console.log('Balance updated successfully:', balanceResult);
         } catch (balanceUpdateError) {
           console.error('Balance update exception:', balanceUpdateError);
-          return res.status(500).json({ 
-            error: 'Failed to update user balance: ' + balanceUpdateError.message 
+          return res.status(500).json({
+            error: 'Failed to update user balance: ' + balanceUpdateError.message
           });
         }
       }
@@ -329,7 +376,7 @@ app.put('/api/admin', authenticateAdmin, async (req, res) => {
           if (!profileErr) {
             fullName = profileData?.full_name || null;
           }
-        } catch (_) {}
+        } catch (_) { }
 
         // Get user email from auth.admin
         let userEmail = null;
@@ -357,8 +404,8 @@ app.put('/api/admin', authenticateAdmin, async (req, res) => {
         console.warn('⚠️ Email notification failed:', e?.message || e);
       }
 
-      return res.status(200).json({ 
-        success: true, 
+      return res.status(200).json({
+        success: true,
         request: data[0],
         email_sent: !!emailResult?.success,
         email_error: emailResult?.error,
@@ -692,7 +739,7 @@ app.get('/api/transactions', authenticateAdmin, async (req, res) => {
 // Admin login endpoint
 app.post('/api/admin/login', async (req, res) => {
   console.log('🔐 Login request received:', req.body);
-  
+
   try {
     const { email, password } = req.body;
 
@@ -719,12 +766,12 @@ app.post('/api/admin/login', async (req, res) => {
     }
 
     console.log('🔒 Comparing passwords...');
-    
+
     // Compare password with hashed password
     const isPasswordValid = await bcrypt.compare(password, admin.password);
-    
+
     console.log('🔑 Password valid:', isPasswordValid);
-    
+
     if (!isPasswordValid) {
       console.log('❌ Invalid password');
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -746,10 +793,10 @@ app.post('/api/admin/login', async (req, res) => {
     // Return success with admin data (excluding password)
     const { password: _, ...adminData } = admin;
     console.log('🎉 Sending success response');
-    return res.status(200).json({ 
-      success: true, 
+    return res.status(200).json({
+      success: true,
       admin: adminData,
-      message: 'Login successful' 
+      message: 'Login successful'
     });
 
   } catch (error) {
