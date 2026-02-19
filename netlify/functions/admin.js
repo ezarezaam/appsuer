@@ -149,7 +149,7 @@ export const handler = async (event, context) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: 'Server misconfiguration - missing environment variables',
         details: {
           supabase_url: !!SUPABASE_URL,
@@ -166,7 +166,7 @@ export const handler = async (event, context) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: 'Database connection failed',
         details: 'Supabase client could not be initialized. Check environment variables.'
       })
@@ -192,9 +192,9 @@ export const handler = async (event, context) => {
       case 'GET':
         if (queryParams.action === 'topup-requests') {
           const { status } = queryParams;
-          
+
           console.log('📋 Fetching topup requests, status filter:', status);
-          
+
           let query = supabase
             .from('topup_requests')
             .select(`
@@ -221,12 +221,12 @@ export const handler = async (event, context) => {
               details: error.details,
               hint: error.hint
             });
-            
+
             return {
               statusCode: 500,
               headers,
-              body: JSON.stringify({ 
-                error: error.message, 
+              body: JSON.stringify({
+                error: error.message,
                 details: error.details,
                 code: error.code,
                 hint: error.hint || 'Check if topup_requests table and user_profiles table exist'
@@ -274,7 +274,7 @@ export const handler = async (event, context) => {
         if (queryParams.action === 'test-connection') {
           try {
             console.log('🧪 Testing database connection...');
-            
+
             // Test database connection
             const { data: testData, error: testError } = await supabase
               .from('topup_requests')
@@ -289,12 +289,12 @@ export const handler = async (event, context) => {
                 details: testError.details,
                 hint: testError.hint
               });
-              
+
               return {
                 statusCode: 500,
                 headers,
-                body: JSON.stringify({ 
-                  success: false, 
+                body: JSON.stringify({
+                  success: false,
                   error: 'Database connection failed',
                   details: testError.message,
                   code: testError.code,
@@ -304,7 +304,7 @@ export const handler = async (event, context) => {
             }
 
             console.log('✅ Database connection test successful');
-            
+
             // Get counts
             const { data: topupData, error: topupError } = await supabase
               .from('topup_requests')
@@ -339,16 +339,69 @@ export const handler = async (event, context) => {
             return {
               statusCode: 500,
               headers,
-              body: JSON.stringify({ 
-                success: false, 
+              body: JSON.stringify({
+                success: false,
                 error: 'Connection test failed',
-                details: error.message 
+                details: error.message
               })
             };
           }
         }
 
-        break;
+        if (queryParams.action === 'subscriptions') {
+          console.log('📬 Subscriptions request received');
+          const { data: subscriptions, error: subscriptionsError } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (subscriptionsError) {
+            console.error('❌ Error fetching subscriptions:', subscriptionsError.message);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({ error: subscriptionsError.message })
+            };
+          }
+          console.log(`✅ Fetched ${subscriptions?.length || 0} subscriptions`);
+
+          // Fetch user profiles for these subscriptions
+          const subUserIds = [...new Set(subscriptions.map(s => s.user_id).filter(Boolean))];
+          let subUserData = [];
+
+          if (subUserIds.length > 0) {
+            const { data: users, error: userError } = await supabase
+              .from('user_profiles')
+              .select('id, full_name, user_email')
+              .in('id', subUserIds);
+
+            if (!userError) {
+              subUserData = users || [];
+            }
+          }
+
+          const enrichedSubscriptions = subscriptions.map(sub => {
+            const profile = subUserData.find(u => u.id === sub.user_id) || {};
+            return {
+              ...sub,
+              full_name: profile.full_name || 'EvenOddPro User',
+              user_email: profile.user_email || `user-${String(sub.user_id).slice(0, 8)}@evenoddpro.com`
+            };
+          });
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, subscriptions: enrichedSubscriptions })
+          };
+        }
+
+        // Default fallback for GET
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'Invalid or missing action' })
+        };
 
       case 'PUT':
         if (queryParams.action === 'update-status') {
@@ -404,8 +457,8 @@ export const handler = async (event, context) => {
                 return {
                   statusCode: 500,
                   headers,
-                  body: JSON.stringify({ 
-                    error: 'Failed to update user balance: ' + balanceError.message 
+                  body: JSON.stringify({
+                    error: 'Failed to update user balance: ' + balanceError.message
                   })
                 };
               }
@@ -416,7 +469,7 @@ export const handler = async (event, context) => {
                 return {
                   statusCode: 500,
                   headers,
-                  body: JSON.stringify({ 
+                  body: JSON.stringify({
                     error: 'Failed to update user balance: ' + (balanceResult?.error || 'Unknown error')
                   })
                 };
@@ -428,8 +481,8 @@ export const handler = async (event, context) => {
               return {
                 statusCode: 500,
                 headers,
-                body: JSON.stringify({ 
-                  error: 'Failed to update user balance: ' + balanceUpdateError.message 
+                body: JSON.stringify({
+                  error: 'Failed to update user balance: ' + balanceUpdateError.message
                 })
               };
             }
@@ -472,7 +525,7 @@ export const handler = async (event, context) => {
               if (!profileErr) {
                 fullName = profileData?.full_name || null;
               }
-            } catch (_) {}
+            } catch (_) { }
 
             // Get email from auth users via admin API (requires service role)
             let userEmail = null;
@@ -503,8 +556,8 @@ export const handler = async (event, context) => {
           return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({ 
-              success: true, 
+            body: JSON.stringify({
+              success: true,
               request: data[0],
               email_sent: !!emailResult?.success,
               email_error: emailResult?.error,
