@@ -50,7 +50,7 @@ const UserSubscription: FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('active');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | 'none'>('none');
 
     const toast = useToast();
