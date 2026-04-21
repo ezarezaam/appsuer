@@ -396,12 +396,162 @@ export const handler = async (event, context) => {
           };
         }
 
+        if (queryParams.action === 'search-users') {
+          const { query: searchQuery } = queryParams;
+          if (!searchQuery) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: 'Search query is required' })
+            };
+          }
+
+          console.log(`🔍 Searching for users in profiles with query: ${searchQuery}`);
+
+          const { data: searchResults, error: searchError } = await supabase
+            .from('user_profiles')
+            .select('id, full_name, user_email')
+            .or(`full_name.ilike.%${searchQuery}%,user_email.ilike.%${searchQuery}%,id.ilike.%${searchQuery}%`)
+            .limit(10);
+
+          if (searchError) {
+            console.error('❌ Error searching users:', searchError.message);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({ error: searchError.message })
+            };
+          }
+
+          const formattedResults = searchResults.map(u => ({
+            user_id: u.id,
+            full_name: u.full_name,
+            user_email: u.user_email
+          }));
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, users: formattedResults })
+          };
+        }
+
+        if (queryParams.action === 'subscription-plans') {
+          console.log('📋 Fetching subscription plans');
+          const { data: plans, error: plansError } = await supabase
+            .from('subscription_plans')
+            .select('*')
+            .order('price', { ascending: true });
+
+          if (plansError) {
+            console.error('❌ Error fetching plans:', plansError.message);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({ error: plansError.message })
+            };
+          }
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, plans: plans || [] })
+          };
+        }
+
         // Default fallback for GET
         return {
           statusCode: 400,
           headers,
           body: JSON.stringify({ error: 'Invalid or missing action' })
         };
+
+      case 'POST':
+        if (queryParams.action === 'update-subscription') {
+          const { id, status, current_period_start, current_period_end, plan_id } = body;
+
+          if (!id) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: 'Missing subscription ID' })
+            };
+          }
+
+          const updateData = {
+            updated_at: new Date().toISOString()
+          };
+
+          if (status) updateData.status = status;
+          if (current_period_start) updateData.current_period_start = current_period_start;
+          if (current_period_end) updateData.current_period_end = current_period_end;
+          if (plan_id) updateData.plan_id = plan_id;
+
+          console.log(`📝 Updating subscription ${id}:`, updateData);
+
+          const { data, error } = await supabase
+            .from('user_subscriptions')
+            .update(updateData)
+            .eq('id', id)
+            .select();
+
+          if (error) {
+            console.error('❌ Error updating subscription:', error.message);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({ error: error.message })
+            };
+          }
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, subscription: data[0] })
+          };
+        }
+
+        if (queryParams.action === 'add-subscription') {
+          const { user_id, plan_id, status, current_period_start, current_period_end } = body;
+
+          if (!user_id || !plan_id || !status || !current_period_start || !current_period_end) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: 'Missing required fields' })
+            };
+          }
+
+          console.log(`➕ Adding new subscription for user ${user_id}:`, { plan_id, status });
+
+          const { data, error } = await supabase
+            .from('user_subscriptions')
+            .insert({
+              user_id,
+              plan_id,
+              status,
+              current_period_start,
+              current_period_end,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select();
+
+          if (error) {
+            console.error('❌ Error adding subscription:', error.message);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({ error: error.message })
+            };
+          }
+
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, subscription: data[0] })
+          };
+        }
+        break;
 
       case 'PUT':
         if (queryParams.action === 'update-status') {

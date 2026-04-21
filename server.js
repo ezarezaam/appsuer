@@ -23,6 +23,11 @@ const PORT = process.env.PORT || 3005;
 // Middleware
 app.use(cors());
 app.use(express.json());
+// Logging middleware
+app.use((req, res, next) => {
+  console.log(`📡 [${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 // Prevent search engine indexing for API responses
 app.use((req, res, next) => {
   res.set('X-Robots-Tag', 'noindex, nofollow');
@@ -112,6 +117,7 @@ async function sendTopupStatusEmail({ to, name, status, amount, paymentMethod, c
 const authenticateAdmin = (req, res, next) => {
   const adminSecret = req.headers['x-admin-secret'];
   if (adminSecret !== ADMIN_SECRET) {
+    console.warn(`🔒 Unauthorized access attempt: ${req.method} ${req.url}`);
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
@@ -121,6 +127,7 @@ const authenticateAdmin = (req, res, next) => {
 app.get('/api/admin', authenticateAdmin, async (req, res) => {
   try {
     const { action, status } = req.query;
+    console.log(`📡 GET /api/admin?action=${action}`);
 
     switch (action) {
       case 'topup-requests':
@@ -269,9 +276,164 @@ app.get('/api/admin', authenticateAdmin, async (req, res) => {
 
         return res.status(200).json({ success: true, subscriptions: enrichedSubscriptions });
 
+      case 'update-subscription':
+        const { id, status: subStatus, current_period_start, current_period_end, plan_id } = req.query;
+
+        if (!id) {
+          return res.status(400).json({ error: 'Missing subscription ID' });
+        }
+
+        const subUpdateData = {
+          updated_at: new Date().toISOString()
+        };
+
+        if (subStatus) subUpdateData.status = subStatus;
+        if (current_period_start) subUpdateData.current_period_start = current_period_start;
+        if (current_period_end) subUpdateData.current_period_end = current_period_end;
+        if (plan_id) subUpdateData.plan_id = plan_id;
+
+        console.log(`📝 Updating subscription via GET ${id}:`, subUpdateData);
+
+        const { data: subUpdateResult, error: subUpdateError } = await supabase
+          .from('user_subscriptions')
+          .update(subUpdateData)
+          .eq('id', id)
+          .select();
+
+        if (subUpdateError) {
+          console.error('❌ Error updating subscription:', subUpdateError.message);
+          return res.status(500).json({ error: subUpdateError.message });
+        }
+
+        return res.status(200).json({ success: true, subscription: subUpdateResult[0] });
+
+      case 'subscription-plans':
+        console.log('📋 Fetching subscription plans');
+        try {
+          const { data: plans, error: plansError } = await supabase
+            .from('subscription_plans')
+            .select('*')
+            .order('price', { ascending: true });
+
+          if (plansError) {
+            console.error('❌ Error fetching plans:', plansError.message);
+            return res.status(500).json({ error: plansError.message });
+          }
+          console.log(`✅ Found ${plans?.length || 0} plans`);
+          return res.status(200).json({ success: true, plans: plans || [] });
+        } catch (err) {
+          console.error('💥 Exception fetching plans:', err);
+          return res.status(500).json({ error: err.message });
+        }
+
+      case 'search-users':
+        const { query: searchQuery } = req.query;
+        if (!searchQuery) {
+          return res.status(400).json({ error: 'Search query is required' });
+        }
+
+        console.log(`🔍 Searching for users with query: ${searchQuery}`);
+        try {
+          const { data: searchResults, error: searchError } = await supabase
+            .from('user_profiles')
+            .select('id, full_name, user_email')
+            .or(`full_name.ilike.%${searchQuery}%,user_email.ilike.%${searchQuery}%,id.ilike.%${searchQuery}%`)
+            .limit(10);
+
+          if (searchError) {
+            console.error('❌ Error searching users:', searchError.message);
+            return res.status(500).json({ error: searchError.message });
+          }
+
+          console.log(`✅ Found ${searchResults?.length || 0} users matching query`);
+          const formattedResults = searchResults.map(u => ({
+            user_id: u.id,
+            full_name: u.full_name,
+            user_email: u.user_email
+          }));
+
+          return res.status(200).json({ success: true, users: formattedResults });
+        } catch (err) {
+          console.error('💥 Exception searching users:', err);
+          return res.status(500).json({ error: err.message });
+        }
+
       default:
         return res.status(400).json({ error: 'Invalid action' });
     }
+  } catch (error) {
+    console.error('API Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/admin', authenticateAdmin, async (req, res) => {
+  try {
+    const { action } = req.query;
+
+    if (action === 'update-subscription') {
+      const { id, status, current_period_start, current_period_end, plan_id } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ error: 'Missing subscription ID' });
+      }
+
+      const updateData = {
+        updated_at: new Date().toISOString()
+      };
+
+      if (status) updateData.status = status;
+      if (current_period_start) updateData.current_period_start = current_period_start;
+      if (current_period_end) updateData.current_period_end = current_period_end;
+      if (plan_id) updateData.plan_id = plan_id;
+
+      console.log(`📝 Updating subscription via POST ${id}:`, updateData);
+
+      const { data, error } = await supabase
+        .from('user_subscriptions')
+        .update(updateData)
+        .eq('id', id)
+        .select();
+
+      if (error) {
+        console.error('❌ Error updating subscription:', error.message);
+        return res.status(500).json({ error: error.message });
+      }
+
+      return res.status(200).json({ success: true, subscription: data[0] });
+    }
+
+    if (action === 'add-subscription') {
+      const { user_id, plan_id, status, current_period_start, current_period_end } = req.body;
+
+      if (!user_id || !plan_id || !status || !current_period_start || !current_period_end) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      console.log(`➕ Adding new subscription for user ${user_id}:`, { plan_id, status });
+
+      const { data, error } = await supabase
+        .from('user_subscriptions')
+        .insert({
+          user_id,
+          plan_id,
+          status,
+          current_period_start,
+          current_period_end,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select();
+
+      if (error) {
+        console.error('❌ Error adding subscription:', error.message);
+        return res.status(500).json({ error: error.message });
+      }
+
+      return res.status(200).json({ success: true, subscription: data[0] });
+    }
+
+    return res.status(400).json({ error: 'Invalid action' });
   } catch (error) {
     console.error('API Error:', error);
     res.status(500).json({ error: 'Internal server error' });

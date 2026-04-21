@@ -59,7 +59,7 @@ const Sidebar: FC<SidebarProps> = ({
     },
     {
       id: 'user-subscription',
-      label: 'User Subscribtion',
+      label: 'User Subscription',
       icon: AddIcon,
       description: 'Kelola langganan pengguna'
     }
