@@ -76,7 +76,7 @@ const UserSubscription: FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState('active');
+    const [statusFilter, setStatusFilter] = useState('ACTIVE');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | 'none'>('none');
     
     // Edit Modal State
@@ -92,7 +92,7 @@ const UserSubscription: FC = () => {
     const addDisclosure = useDisclosure();
     const [newUserId, setNewUserId] = useState('');
     const [newPlanId, setNewPlanId] = useState('');
-    const [newStatus, setNewStatus] = useState('active');
+    const [newStatus, setNewStatus] = useState('ACTIVE');
     const [newStartDate, setNewStartDate] = useState(new Date().toISOString().split('T')[0]);
     const [newEndDate, setNewEndDate] = useState('');
     const [isAdding, setIsAdding] = useState(false);
@@ -111,7 +111,7 @@ const UserSubscription: FC = () => {
         setUserSearchTerm('');
         setFoundUsers([]);
         setHasSearchedUsers(false);
-        setNewStatus('active');
+        setNewStatus('ACTIVE');
         setNewStartDate(new Date().toISOString().split('T')[0]);
         setNewEndDate('');
         if (plans.length > 0) setNewPlanId(plans[0].id);
@@ -296,7 +296,7 @@ const UserSubscription: FC = () => {
 
     const handleEditClick = (sub: Subscription) => {
         setSelectedSubscription(sub);
-        setEditStatus(sub.status);
+        setEditStatus(String(sub.status || 'ACTIVE').toUpperCase());
         setEditPlanId(sub.plan_id);
         // Format dates for input[type="date"]
         setEditStartDate(sub.current_period_start ? new Date(sub.current_period_start).toISOString().split('T')[0] : '');
@@ -420,10 +420,12 @@ const UserSubscription: FC = () => {
     };
 
     const getStatusColor = (status: string) => {
-        switch (status) {
+        switch ((status || '').toLowerCase()) {
             case 'active': return 'green';
             case 'expired': return 'red';
+            case 'inactive': return 'red';
             case 'cancelled': return 'gray';
+            case 'canceled': return 'gray';
             case 'pending': return 'orange';
             default: return 'gray';
         }
@@ -500,10 +502,12 @@ const UserSubscription: FC = () => {
                                         onChange={(e) => setStatusFilter(e.target.value)}
                                     >
                                         <option value="all">Semua Status</option>
-                                        <option value="active">Active</option>
-                                        <option value="expired">Expired</option>
-                                        <option value="pending">Pending</option>
-                                        <option value="cancelled">Cancelled</option>
+                                        <option value="ACTIVE">ACTIVE</option>
+                                        <option value="INACTIVE">INACTIVE</option>
+                                        <option value="PENDING">PENDING</option>
+                                        <option value="CANCELLED">CANCELLED</option>
+                                        <option value="SUSPENDED">SUSPENDED</option>
+                                        <option value="EXPIRED">EXPIRED</option>
                                     </Select>
                                     <Button
                                         colorScheme="blue"
@@ -597,7 +601,7 @@ const UserSubscription: FC = () => {
                                                         </Badge>
                                                     </Td>
                                                     <Td>
-                                                        <Badge colorScheme={getStatusColor(sub.status.toLowerCase())}>
+                                                        <Badge colorScheme={getStatusColor(sub.status)}>
                                                             {sub.status}
                                                         </Badge>
                                                     </Td>
@@ -663,10 +667,12 @@ const UserSubscription: FC = () => {
                                     value={editStatus} 
                                     onChange={(e) => setEditStatus(e.target.value)}
                                 >
-                                    <option value="active">Active</option>
-                                    <option value="expired">Expired</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="cancelled">Cancelled</option>
+                                    <option value="ACTIVE">ACTIVE</option>
+                                    <option value="INACTIVE">INACTIVE</option>
+                                    <option value="PENDING">PENDING</option>
+                                    <option value="CANCELLED">CANCELLED</option>
+                                    <option value="SUSPENDED">SUSPENDED</option>
+                                    <option value="EXPIRED">EXPIRED</option>
                                 </Select>
                             </FormControl>
 
@@ -807,8 +813,12 @@ const UserSubscription: FC = () => {
                             <FormControl isRequired>
                                 <FormLabel>Status</FormLabel>
                                 <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
-                                    <option value="active">Active</option>
-                                    <option value="pending">Pending</option>
+                                    <option value="ACTIVE">ACTIVE</option>
+                                    <option value="PENDING">PENDING</option>
+                                    <option value="INACTIVE">INACTIVE</option>
+                                    <option value="CANCELLED">CANCELLED</option>
+                                    <option value="SUSPENDED">SUSPENDED</option>
+                                    <option value="EXPIRED">EXPIRED</option>
                                 </Select>
                             </FormControl>
 

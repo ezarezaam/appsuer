@@ -47,6 +47,16 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !ADMIN_SECRET) {
 // Create Supabase client with service role key (server-side only)
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
+const ALLOWED_SUBSCRIPTION_STATUSES = new Set(['PENDING', 'ACTIVE', 'INACTIVE', 'CANCELLED', 'SUSPENDED', 'EXPIRED']);
+
+const normalizeSubscriptionStatus = (rawStatus) => {
+  const value = String(rawStatus || '').trim().toUpperCase();
+  const aliases = {
+    CANCELED: 'CANCELLED'
+  };
+  return aliases[value] || value;
+};
+
 // Email (SMTP) configuration
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
@@ -287,7 +297,13 @@ app.get('/api/admin', authenticateAdmin, async (req, res) => {
           updated_at: new Date().toISOString()
         };
 
-        if (subStatus) subUpdateData.status = subStatus;
+        if (subStatus) {
+          const normalizedStatus = normalizeSubscriptionStatus(subStatus);
+          if (!ALLOWED_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
+            return res.status(400).json({ error: `Invalid subscription status: ${subStatus}` });
+          }
+          subUpdateData.status = normalizedStatus;
+        }
         if (current_period_start) subUpdateData.current_period_start = current_period_start;
         if (current_period_end) subUpdateData.current_period_end = current_period_end;
         if (plan_id) subUpdateData.plan_id = plan_id;
@@ -396,7 +412,13 @@ app.post('/api/admin', authenticateAdmin, async (req, res) => {
         updated_at: new Date().toISOString()
       };
 
-      if (status) updateData.status = status;
+      if (status) {
+        const normalizedStatus = normalizeSubscriptionStatus(status);
+        if (!ALLOWED_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
+          return res.status(400).json({ error: `Invalid subscription status: ${status}` });
+        }
+        updateData.status = normalizedStatus;
+      }
       if (current_period_start) updateData.current_period_start = current_period_start;
       if (current_period_end) updateData.current_period_end = current_period_end;
       if (plan_id) updateData.plan_id = plan_id;
@@ -425,13 +447,17 @@ app.post('/api/admin', authenticateAdmin, async (req, res) => {
       }
 
       console.log(`➕ Adding new subscription for user ${user_id}:`, { plan_id, status });
+      const normalizedStatus = normalizeSubscriptionStatus(status);
+      if (!ALLOWED_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
+        return res.status(400).json({ error: `Invalid subscription status: ${status}` });
+      }
 
       const { data, error } = await supabase
         .from('user_subscriptions')
         .insert({
           user_id,
           plan_id,
-          status,
+          status: normalizedStatus,
           current_period_start,
           current_period_end,
           created_at: new Date().toISOString(),

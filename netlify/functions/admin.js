@@ -36,6 +36,16 @@ const isUuid = (value) =>
   typeof value === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
+const ALLOWED_SUBSCRIPTION_STATUSES = new Set(['PENDING', 'ACTIVE', 'INACTIVE', 'CANCELLED', 'SUSPENDED', 'EXPIRED']);
+
+const normalizeSubscriptionStatus = (rawStatus) => {
+  const value = String(rawStatus || '').trim().toUpperCase();
+  const aliases = {
+    CANCELED: 'CANCELLED'
+  };
+  return aliases[value] || value;
+};
+
 let mailer = null;
 try {
   if (SMTP_HOST && SMTP_PORT && SMTP_FROM && (SMTP_USER ? SMTP_PASS : true)) {
@@ -528,7 +538,17 @@ export const handler = async (event, context) => {
             updated_at: new Date().toISOString()
           };
 
-          if (status) updateData.status = status;
+          if (status) {
+            const normalizedStatus = normalizeSubscriptionStatus(status);
+            if (!ALLOWED_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
+              return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ error: `Invalid subscription status: ${status}` })
+              };
+            }
+            updateData.status = normalizedStatus;
+          }
           if (current_period_start) updateData.current_period_start = current_period_start;
           if (current_period_end) updateData.current_period_end = current_period_end;
           if (plan_id) updateData.plan_id = plan_id;
@@ -659,13 +679,21 @@ export const handler = async (event, context) => {
           }
 
           console.log(`➕ Adding new subscription for user ${resolvedUserId}:`, { plan_id: resolvedPlanId, status });
+          const normalizedStatus = normalizeSubscriptionStatus(status);
+          if (!ALLOWED_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: `Invalid subscription status: ${status}` })
+            };
+          }
 
           const { data, error } = await supabase
             .from('user_subscriptions')
             .insert({
               user_id: resolvedUserId,
               plan_id: resolvedPlanId,
-              status,
+              status: normalizedStatus,
               current_period_start,
               current_period_end,
               created_at: new Date().toISOString(),
