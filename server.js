@@ -334,12 +334,26 @@ app.get('/api/admin', authenticateAdmin, async (req, res) => {
 
         console.log(`🔍 Searching for users with query: ${searchQuery}`);
         try {
-          const { data: searchResults, error: searchError } = await supabase
+          const q = String(searchQuery).trim().replaceAll(',', ' ');
+          const like = `%${q}%`;
+          const isUuid = (value) =>
+            typeof value === 'string' &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+          let queryBuilder = supabase
             .from('user_profiles')
             .select('id, full_name, user_email')
-            .or(`full_name.ilike.%${searchQuery}%,user_email.ilike.%${searchQuery}%,id.ilike.%${searchQuery}%`)
             .limit(10);
 
+          if (isUuid(q)) {
+            queryBuilder = queryBuilder.eq('id', q);
+          } else if (q.includes('@')) {
+            queryBuilder = queryBuilder.ilike('user_email', like);
+          } else {
+            queryBuilder = queryBuilder.ilike('full_name', like);
+          }
+
+          const { data: searchResults, error: searchError } = await queryBuilder;
           if (searchError) {
             console.error('❌ Error searching users:', searchError.message);
             return res.status(500).json({ error: searchError.message });

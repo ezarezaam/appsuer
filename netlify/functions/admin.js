@@ -32,6 +32,10 @@ const SMTP_FROM = process.env.SMTP_FROM || 'no-reply@evenoddpro.com';
 const EMAIL_LOCALE = (process.env.EMAIL_LOCALE || 'en').toLowerCase();
 const EMAIL_CURRENCY = process.env.EMAIL_CURRENCY || 'USD';
 
+const isUuid = (value) =>
+  typeof value === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
 let mailer = null;
 try {
   if (SMTP_HOST && SMTP_PORT && SMTP_FROM && (SMTP_USER ? SMTP_PASS : true)) {
@@ -408,26 +412,69 @@ export const handler = async (event, context) => {
 
           console.log(`🔍 Searching for users in profiles with query: ${searchQuery}`);
 
-          const { data: searchResults, error: searchError } = await supabase
+          const q = String(searchQuery).trim().replaceAll(',', ' ');
+          const like = `%${q}%`;
+          let queryBuilder = supabase
             .from('user_profiles')
-            .select('id, full_name, user_email')
-            .or(`full_name.ilike.%${searchQuery}%,user_email.ilike.%${searchQuery}%,id.ilike.%${searchQuery}%`)
+            .select('id, full_name, user_email, email')
             .limit(10);
 
-          if (searchError) {
-            console.error('❌ Error searching users:', searchError.message);
+          if (isUuid(q)) {
+            queryBuilder = queryBuilder.eq('id', q);
+          } else if (q.includes('@')) {
+            queryBuilder = queryBuilder.ilike('user_email', like);
+          } else {
+            queryBuilder = queryBuilder.ilike('full_name', like);
+          }
+
+          const { data: profileMatches, error: profileError } = await queryBuilder;
+          if (profileError) {
+            console.error('❌ Error searching users:', profileError.message);
             return {
               statusCode: 500,
               headers,
-              body: JSON.stringify({ error: searchError.message })
+              body: JSON.stringify({ error: profileError.message })
             };
           }
 
-          const formattedResults = searchResults.map(u => ({
-            user_id: u.id,
-            full_name: u.full_name,
-            user_email: u.user_email
-          }));
+          const resultsById = new Map();
+          for (const u of (profileMatches || [])) {
+            resultsById.set(u.id, {
+              user_id: u.id,
+              full_name: u.full_name ?? null,
+              user_email: u.user_email ?? u.email ?? null
+            });
+          }
+
+          if (resultsById.size < 10) {
+            const qLower = q.toLowerCase();
+            for (let page = 1; page <= 3 && resultsById.size < 10; page += 1) {
+              const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 100 });
+              if (error) {
+                console.error('❌ Error listing auth users:', error.message);
+                break;
+              }
+
+              const users = data?.users || [];
+              for (const user of users) {
+                if (resultsById.size >= 10) break;
+                const email = (user.email || '').toLowerCase();
+                const id = (user.id || '').toLowerCase();
+                const name = (user.user_metadata?.full_name || user.user_metadata?.name || user.user_metadata?.fullName || '').toLowerCase();
+
+                if (!email.includes(qLower) && !id.includes(qLower) && !name.includes(qLower)) continue;
+                if (resultsById.has(user.id)) continue;
+
+                resultsById.set(user.id, {
+                  user_id: user.id,
+                  full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.user_metadata?.fullName || null,
+                  user_email: user.email || null
+                });
+              }
+            }
+          }
+
+          const formattedResults = Array.from(resultsById.values()).slice(0, 10);
 
           return {
             statusCode: 200,
@@ -521,13 +568,103 @@ export const handler = async (event, context) => {
             };
           }
 
-          console.log(`➕ Adding new subscription for user ${user_id}:`, { plan_id, status });
+          let resolvedUserId = String(user_id).trim();
+          const resolvedPlanId = String(plan_id).trim();
+
+          if (!isUuid(resolvedUserId) && resolvedUserId.includes('@')) {
+            const emailValue = resolvedUserId;
+
+            const profileOrWithEmail = `user_email.ilike.%${emailValue}%,email.ilike.%${emailValue}%`;
+            const profileOrWithUserEmailOnly = `user_email.ilike.%${emailValue}%`;
+            const profileOrWithEmailOnly = `email.ilike.%${emailValue}%`;
+
+            const profileQueries = [
+              () => supabase.from('user_profiles').select('id').or(profileOrWithEmail).limit(1),
+              () => supabase.from('user_profiles').select('id').or(profileOrWithUserEmailOnly).limit(1),
+              () => supabase.from('user_profiles').select('id').or(profileOrWithEmailOnly).limit(1),
+            ];
+
+            for (const run of profileQueries) {
+              const { data, error } = await run();
+              if (!error) {
+                const found = (data || [])[0];
+                if (found?.id) resolvedUserId = found.id;
+                break;
+              }
+              const message = String(error.message || '').toLowerCase();
+              const isMissingColumn = message.includes('does not exist');
+              if (!isMissingColumn) {
+                console.error('❌ Error resolving user by email:', error.message);
+                return {
+                  statusCode: 500,
+                  headers,
+                  body: JSON.stringify({ error: error.message })
+                };
+              }
+            }
+          }
+
+          if (!isUuid(resolvedUserId)) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: 'User ID harus UUID yang valid' })
+            };
+          }
+
+          const { data: planExists, error: planCheckError } = await supabase
+            .from('subscription_plans')
+            .select('id')
+            .eq('id', resolvedPlanId)
+            .limit(1);
+
+          if (planCheckError) {
+            console.error('❌ Error checking plan:', planCheckError.message);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({ error: planCheckError.message })
+            };
+          }
+
+          if (!planExists || planExists.length === 0) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: 'Plan ID tidak ditemukan' })
+            };
+          }
+
+          const { data: profileExists, error: profileCheckError } = await supabase
+            .from('user_profiles')
+            .select('id')
+            .eq('id', resolvedUserId)
+            .limit(1);
+
+          if (profileCheckError) {
+            console.error('❌ Error checking user profile:', profileCheckError.message);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({ error: profileCheckError.message })
+            };
+          }
+
+          if (!profileExists || profileExists.length === 0) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ error: 'User UUID tidak ditemukan di user_profiles' })
+            };
+          }
+
+          console.log(`➕ Adding new subscription for user ${resolvedUserId}:`, { plan_id: resolvedPlanId, status });
 
           const { data, error } = await supabase
             .from('user_subscriptions')
             .insert({
-              user_id,
-              plan_id,
+              user_id: resolvedUserId,
+              plan_id: resolvedPlanId,
               status,
               current_period_start,
               current_period_end,

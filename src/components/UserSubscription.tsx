@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { FC } from 'react';
 import {
     Box,
@@ -61,6 +61,15 @@ interface Plan {
     price: number;
 }
 
+interface FoundUser {
+    user_id: string;
+    full_name: string | null;
+    user_email: string | null;
+}
+
+const isUuid = (value: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
 const UserSubscription: FC = () => {
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
     const [plans, setPlans] = useState<Plan[]>([]);
@@ -90,21 +99,27 @@ const UserSubscription: FC = () => {
     
     // User Search for adding
     const [userSearchTerm, setUserSearchTerm] = useState('');
-    const [foundUsers, setFoundUsers] = useState<any[]>([]);
+    const [foundUsers, setFoundUsers] = useState<FoundUser[]>([]);
     const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+    const [hasSearchedUsers, setHasSearchedUsers] = useState(false);
 
     const toast = useToast();
 
     useEffect(() => {
-        fetchSubscriptions();
-        fetchPlans();
-    }, []);
+        if (!addDisclosure.isOpen) return;
+        setNewUserId('');
+        setUserSearchTerm('');
+        setFoundUsers([]);
+        setHasSearchedUsers(false);
+        setNewStatus('active');
+        setNewStartDate(new Date().toISOString().split('T')[0]);
+        setNewEndDate('');
+        if (plans.length > 0) setNewPlanId(plans[0].id);
+    }, [addDisclosure.isOpen, plans]);
 
-    const fetchPlans = async () => {
+    const fetchPlans = useCallback(async () => {
         const secret = import.meta.env.VITE_ADMIN_SECRET_KEY;
-        console.log('Fetching plans with secret:', secret ? 'Set' : 'NOT SET');
         if (!secret) {
-            console.error('VITE_ADMIN_SECRET_KEY is not defined in environment variables!');
             return;
         }
         try {
@@ -113,73 +128,95 @@ const UserSubscription: FC = () => {
                     'x-admin-secret': secret
                 }
             });
-            console.log('Plans response status:', response.status);
             const data = await response.json();
-            console.log('Plans data:', data);
             if (data.success) {
                 setPlans(data.plans || []);
                 if (data.plans?.length > 0) {
                     setNewPlanId(data.plans[0].id);
                 }
             }
-        } catch (err) {
-            console.error('Error fetching plans:', err);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Gagal mengambil data plan';
+            toast({
+                title: 'Error',
+                description: message,
+                status: 'error',
+                duration: 4000,
+                isClosable: true,
+            });
         }
-    };
+    }, [toast]);
 
-    const searchUsers = async () => {
-        if (!userSearchTerm.trim()) return;
+    const searchUsers = useCallback(async (term: string, signal?: AbortSignal) => {
+        if (!term.trim()) return;
         const secret = import.meta.env.VITE_ADMIN_SECRET_KEY;
-        console.log('Searching users for:', userSearchTerm, 'with secret:', secret ? 'Set' : 'NOT SET');
-        
         if (!secret) {
-            console.error('VITE_ADMIN_SECRET_KEY is not defined!');
+            toast({
+                title: 'Error',
+                description: 'Admin secret belum di-set (VITE_ADMIN_SECRET_KEY)',
+                status: 'error',
+                duration: 4000,
+                isClosable: true,
+            });
             return;
         }
 
         try {
             setIsSearchingUsers(true);
-            const url = `/api/admin?action=search-users&query=${encodeURIComponent(userSearchTerm)}`;
-            console.log('Search URL:', url);
+            setHasSearchedUsers(true);
+            setFoundUsers([]);
+            const url = `/api/admin?action=search-users&query=${encodeURIComponent(term)}`;
             const response = await fetch(url, {
                 headers: {
                     'x-admin-secret': secret
-                }
+                },
+                signal
             });
-            console.log('Search response status:', response.status);
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
-            console.log('Search data:', data);
             if (data.success) {
                 setFoundUsers(data.users || []);
-                if (!data.users || data.users.length === 0) {
-                    toast({
-                        title: 'Info',
-                        description: 'User tidak ditemukan',
-                        status: 'info',
-                        duration: 3000,
-                    });
-                }
             } else {
-                console.error('Search failed:', data.error);
-                toast({
-                    title: 'Gagal',
-                    description: data.error || 'Terjadi kesalahan saat mencari user',
-                    status: 'error',
-                    duration: 3000,
-                });
+                throw new Error(data.error || 'Terjadi kesalahan saat mencari user');
             }
-        } catch (err: any) {
-            console.error('Error searching users:', err);
+        } catch (err: unknown) {
+            if (signal?.aborted) return;
+            const message = err instanceof Error ? err.message : 'Terjadi kesalahan saat mencari user';
             toast({
                 title: 'Error',
-                description: err.message,
+                description: message,
                 status: 'error',
-                duration: 3000,
+                duration: 4000,
+                isClosable: true,
             });
         } finally {
             setIsSearchingUsers(false);
         }
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        if (!addDisclosure.isOpen) return;
+        const term = userSearchTerm.trim();
+        if (term.length < 2) {
+            setHasSearchedUsers(false);
+            setFoundUsers([]);
+            return;
+        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            searchUsers(term, controller.signal);
+        }, 400);
+
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
+    }, [userSearchTerm, addDisclosure.isOpen, searchUsers]);
 
     const handleAddSubscription = async () => {
         if (!newUserId || !newPlanId || !newStartDate || !newEndDate) {
@@ -188,6 +225,17 @@ const UserSubscription: FC = () => {
                 description: 'Mohon isi semua field yang diperlukan',
                 status: 'error',
                 duration: 3000,
+            });
+            return;
+        }
+
+        if (!isUuid(newUserId)) {
+            toast({
+                title: 'Error',
+                description: 'User ID harus UUID. Pilih user dari hasil pencarian.',
+                status: 'error',
+                duration: 4000,
+                isClosable: true,
             });
             return;
         }
@@ -209,6 +257,11 @@ const UserSubscription: FC = () => {
                 })
             });
 
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
 
             if (data.success) {
@@ -227,10 +280,11 @@ const UserSubscription: FC = () => {
             } else {
                 throw new Error(data.error || 'Gagal menambahkan langganan');
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Gagal menambahkan langganan';
             toast({
                 title: 'Add Error',
-                description: err.message,
+                description: message,
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -270,6 +324,11 @@ const UserSubscription: FC = () => {
                 })
             });
 
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
             const data = await response.json();
 
             if (data.success) {
@@ -285,10 +344,11 @@ const UserSubscription: FC = () => {
             } else {
                 throw new Error(data.error || 'Gagal memperbarui langganan');
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Gagal memperbarui langganan';
             toast({
                 title: 'Update Error',
-                description: err.message,
+                description: message,
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -298,7 +358,7 @@ const UserSubscription: FC = () => {
         }
     };
 
-    const fetchSubscriptions = async () => {
+    const fetchSubscriptions = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
@@ -321,12 +381,12 @@ const UserSubscription: FC = () => {
             } else {
                 throw new Error(data.error || 'Failed to fetch subscriptions');
             }
-        } catch (err: any) {
-            console.error('Error fetching subscriptions:', err);
-            setError(err.message || 'Failed to fetch subscriptions');
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to fetch subscriptions';
+            setError(message);
             toast({
                 title: 'Fetch Error',
-                description: err.message,
+                description: message,
                 status: 'error',
                 duration: 5000,
                 isClosable: true,
@@ -334,7 +394,12 @@ const UserSubscription: FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        fetchSubscriptions();
+        fetchPlans();
+    }, [fetchSubscriptions, fetchPlans]);
 
     const calculateRemainingDays = (endDate: string | null) => {
         if (!endDate) return 0;
@@ -452,7 +517,7 @@ const UserSubscription: FC = () => {
                                         colorScheme="green"
                                         onClick={addDisclosure.onOpen}
                                     >
-                                        Tambah User
+                                        Tambah Langganan
                                     </Button>
                                 </HStack>
                                 <Box bg="blue.50" px={4} py={2} borderRadius="md" borderLeft="4px solid" borderColor="blue.500">
@@ -669,11 +734,11 @@ const UserSubscription: FC = () => {
                                         placeholder="Cari nama, email, atau ID..." 
                                         value={userSearchTerm}
                                         onChange={(e) => setUserSearchTerm(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && searchUsers()}
+                                        onKeyDown={(e) => e.key === 'Enter' && searchUsers(userSearchTerm.trim())}
                                     />
                                     <Button 
                                         leftIcon={<Icon as={FaSearch} />} 
-                                        onClick={searchUsers}
+                                        onClick={() => searchUsers(userSearchTerm.trim())}
                                         isLoading={isSearchingUsers}
                                     >
                                         Cari
@@ -681,29 +746,41 @@ const UserSubscription: FC = () => {
                                 </HStack>
                             </FormControl>
 
-                            {foundUsers.length > 0 && (
+                            {(isSearchingUsers || foundUsers.length > 0 || hasSearchedUsers) && (
                                 <Box borderWidth="1px" borderRadius="md" p={2} bg="gray.50">
                                     <Text fontSize="xs" fontWeight="bold" mb={2} color="gray.500">HASIL PENCARIAN:</Text>
-                                    <VStack align="stretch" spacing={2}>
-                                        {foundUsers.map(user => (
-                                            <HStack 
-                                                key={user.user_id} 
-                                                justify="space-between" 
-                                                p={2} 
-                                                bg={newUserId === user.user_id ? "blue.100" : "white"}
-                                                borderRadius="md"
-                                                cursor="pointer"
-                                                onClick={() => setNewUserId(user.user_id)}
-                                                _hover={{ bg: "blue.50" }}
-                                            >
-                                                <VStack align="start" spacing={0}>
-                                                    <Text fontWeight="bold" fontSize="sm">{user.full_name}</Text>
-                                                    <Text fontSize="xs" color="gray.500">{user.user_email}</Text>
-                                                </VStack>
-                                                {newUserId === user.user_id && <Badge colorScheme="blue">Terpilih</Badge>}
-                                            </HStack>
-                                        ))}
-                                    </VStack>
+                                    {isSearchingUsers ? (
+                                        <Box py={4} textAlign="center">
+                                            <Spinner size="sm" mr={2} />
+                                            <Text as="span" fontSize="sm" color="gray.600">Mencari user...</Text>
+                                        </Box>
+                                    ) : foundUsers.length === 0 ? (
+                                        <Box py={4} textAlign="center">
+                                            <Text fontSize="sm" color="gray.600">Tidak ada user ditemukan</Text>
+                                            <Text fontSize="xs" color="gray.500">Ketik minimal 2 karakter (nama/email/ID)</Text>
+                                        </Box>
+                                    ) : (
+                                        <VStack align="stretch" spacing={2}>
+                                            {foundUsers.map(user => (
+                                                <HStack 
+                                                    key={user.user_id} 
+                                                    justify="space-between" 
+                                                    p={2} 
+                                                    bg={newUserId === user.user_id ? "blue.100" : "white"}
+                                                    borderRadius="md"
+                                                    cursor="pointer"
+                                                    onClick={() => setNewUserId(user.user_id)}
+                                                    _hover={{ bg: "blue.50" }}
+                                                >
+                                                    <VStack align="start" spacing={0}>
+                                                        <Text fontWeight="bold" fontSize="sm">{user.full_name || '-'}</Text>
+                                                        <Text fontSize="xs" color="gray.500">{user.user_email || '-'}</Text>
+                                                    </VStack>
+                                                    {newUserId === user.user_id && <Badge colorScheme="blue">Terpilih</Badge>}
+                                                </HStack>
+                                            ))}
+                                        </VStack>
+                                    )}
                                 </Box>
                             )}
 

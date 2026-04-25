@@ -32,3 +32,5 @@ dist-ssr
 
 # Private docs (avoid pushing operational SQL)
 BALANCE_SYSTEM_SETUP.md
+
+server.js.bak
