@@ -426,7 +426,7 @@ export const handler = async (event, context) => {
           const like = `%${q}%`;
           let queryBuilder = supabase
             .from('user_profiles')
-            .select('id, full_name, user_email, email')
+            .select('id, full_name, user_email')
             .limit(10);
 
           if (isUuid(q)) {
@@ -452,7 +452,7 @@ export const handler = async (event, context) => {
             resultsById.set(u.id, {
               user_id: u.id,
               full_name: u.full_name ?? null,
-              user_email: u.user_email ?? u.email ?? null
+              user_email: u.user_email ?? null
             });
           }
 
@@ -593,34 +593,21 @@ export const handler = async (event, context) => {
 
           if (!isUuid(resolvedUserId) && resolvedUserId.includes('@')) {
             const emailValue = resolvedUserId;
-
-            const profileOrWithEmail = `user_email.ilike.%${emailValue}%,email.ilike.%${emailValue}%`;
-            const profileOrWithUserEmailOnly = `user_email.ilike.%${emailValue}%`;
-            const profileOrWithEmailOnly = `email.ilike.%${emailValue}%`;
-
-            const profileQueries = [
-              () => supabase.from('user_profiles').select('id').or(profileOrWithEmail).limit(1),
-              () => supabase.from('user_profiles').select('id').or(profileOrWithUserEmailOnly).limit(1),
-              () => supabase.from('user_profiles').select('id').or(profileOrWithEmailOnly).limit(1),
-            ];
-
-            for (const run of profileQueries) {
-              const { data, error } = await run();
-              if (!error) {
-                const found = (data || [])[0];
-                if (found?.id) resolvedUserId = found.id;
-                break;
-              }
-              const message = String(error.message || '').toLowerCase();
-              const isMissingColumn = message.includes('does not exist');
-              if (!isMissingColumn) {
-                console.error('❌ Error resolving user by email:', error.message);
-                return {
-                  statusCode: 500,
-                  headers,
-                  body: JSON.stringify({ error: error.message })
-                };
-              }
+            const { data, error } = await supabase
+              .from('user_profiles')
+              .select('id')
+              .ilike('user_email', `%${emailValue}%`)
+              .limit(1);
+            if (!error) {
+              const found = (data || [])[0];
+              if (found?.id) resolvedUserId = found.id;
+            } else {
+              console.error('❌ Error resolving user by email:', error.message);
+              return {
+                statusCode: 500,
+                headers,
+                body: JSON.stringify({ error: error.message })
+              };
             }
           }
 
